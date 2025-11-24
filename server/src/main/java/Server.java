@@ -10,16 +10,30 @@ import java.util.Map;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import com.zeroc.Ice.Communicator;
+import com.zeroc.Ice.ObjectAdapter;
+import com.zeroc.Ice.Util;
+
 import dtos.Request;
 import dtos.Response;
 import model.*;
 import services.ServerServices;
+import services.CallService; 
+import ice.VoiceChatI;
+import daos.UserDao;
+import daos.GroupDao;
 
 public class Server {
 
     private Gson gson;
     private ServerServices services;
+    private CallService callService;
     private boolean running;
+
+    private Communicator communicator; 
+    private static final String ICE_ADAPTER_NAME = "VoiceChatAdapter"; 
+    private static final String ICE_ENDPOINT = "tcp -h 127.0.0.1 -p 12000"; 
+    private static final String SERVER_IP = "127.0.0.1"; // IP que se enviará al cliente para UDP
 
     public static void main(String[] args) throws Exception {
         new Server();
@@ -27,16 +41,59 @@ public class Server {
 
     public Server() throws Exception {
         gson = new Gson();
-        services = new ServerServices();
+        services = new ServerServices(); 
+        
+        // Inicializar CallService usando los DAOs existentes
+        UserDao usersDao = services.getUsersDao(); 
+        GroupDao groupDao = services.getGroupDao(); 
+        callService = new CallService(usersDao, groupDao); 
+        
+        // 1. Iniciar Servidor Ice en un hilo separado
+        startIceServer(); 
+
+        // 2. Continuar con el servidor de mensajería TCP existente
         int port = 5000;
         ServerSocket socket = new ServerSocket(port);
         System.out.println("Server running on port: " + port);
         running = true;
+        
+        // Usar un hilo para manejar conexiones TCP sin bloquear el hilo principal
         while (running) {
             Socket sc = socket.accept();
-            handleClient(sc);
+            // Esto permite que el servidor maneje múltiples conexiones TCP secuencialmente
+            // El Proxy de Express.js asegura que estas peticiones sean cortas y rápidas.
+            new Thread(() -> handleClient(sc)).start();
         }
         socket.close();
+        
+        if (communicator != null) {
+            communicator.destroy();
+        }
+    }
+
+    private void startIceServer() {
+        Thread iceThread = new Thread(() -> {
+            try {
+                communicator = Util.initialize();
+                ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints(
+                    ICE_ADAPTER_NAME, ICE_ENDPOINT
+                );
+                
+                VoiceChatI voiceChatServant = new VoiceChatI(callService, SERVER_IP); 
+                
+                adapter.add(voiceChatServant, Util.stringToIdentity("VoiceChat"));
+                
+                adapter.activate();
+                System.out.println("ZeroC Ice Server running on endpoint: " + ICE_ENDPOINT);
+
+                communicator.waitForShutdown(); 
+            } catch (Exception e) {
+                System.err.println("Error initializing ZeroC Ice Server: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+        
+        iceThread.start();
     }
 
     public void handleClient(Socket socket){

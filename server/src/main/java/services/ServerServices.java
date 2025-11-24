@@ -112,4 +112,12 @@ public class ServerServices {
         return messageDao.findAllKeys();
     }
 
+    public GroupDao getGroupDao() {
+        return (GroupDao) groupDao;
+    }
+
+    public UserDao getUsersDao() {
+        return (UserDao) usersDao;
+    }
+
 }
