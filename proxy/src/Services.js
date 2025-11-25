@@ -166,14 +166,14 @@ app.post("/create-group", (req, res) => {
   });
 });
 
-app.post("/add_message", (req, res) => {
+app.post("/add_text", (req, res) => {
   const messageData = req.body;
 
   const socket = new net.Socket();
 
   socket.connect(serverPort, serverIp, () => {
     const message = JSON.stringify({
-      action: "add_message",   
+      action: "add_text",   
       data: messageData,        
     });
 

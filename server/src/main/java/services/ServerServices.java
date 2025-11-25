@@ -29,7 +29,7 @@ public class ServerServices {
             System.out.println("The new user " + newUser.getName() + " was registered");
         }
 
-        return usersDao.finById(newUser.getName());
+        return usersDao.findById(newUser.getName());
     }
 
     public User updateUser(String name, boolean online) {
@@ -37,7 +37,7 @@ public class ServerServices {
         usersDao.update(newUser);
         System.out.println("The user " + newUser.getName() + " has been updated. Online status: online = " + newUser.isOnline());
 
-        return usersDao.finById(newUser.getName());
+        return usersDao.findById(newUser.getName());
     }
 
     synchronized public List<String> getOnlineUsers() {
@@ -76,11 +76,11 @@ public class ServerServices {
 
         System.out.println("The group " + created.getName() + " has been created with members: " + created.getMembers().toString());
 
-        return groupDao.finById(groupName);
+        return groupDao.findById(groupName);
     }
 
-    synchronized public Message addMessage(String sender, String receiver, String msg) {
-        Message newMessage = new Message(sender, receiver, msg);
+    synchronized public Text addText(String sender, String receiver, String msg) {
+        Text newMessage = new Text(sender, receiver, msg);
 
         if(!isGroup(receiver)) {
             messageDao.saveUserMessage(newMessage);
@@ -91,9 +91,21 @@ public class ServerServices {
         return newMessage;
     }
 
-    synchronized public List<Message> getChatMessages(String sender, String receiver, boolean isGroup) {
+    synchronized public Audio addAudio(String sender, String receiver, byte[] data) {
+        Audio newMessage = new Audio(sender, receiver, data);
+
+        if(!isGroup(receiver)) {
+            messageDao.saveUserMessage(newMessage);
+        } else {
+            messageDao.saveGroupMessage(newMessage);
+        }
+        
+        return newMessage;
+    }
+
+    synchronized public List<IMessage> getChatMessages(String sender, String receiver, boolean isGroup) {
         if (!isGroup) {
-            return messageDao.finById(new Pair<>(sender, receiver));
+            return messageDao.findById(new Pair<>(sender, receiver));
         } else {
             //Obtener todos los mensajes en los que el receiver sea un grupo
             return messageDao.findByGroup(receiver);
@@ -101,10 +113,10 @@ public class ServerServices {
     }
 
     public boolean isGroup(String name) {
-        return groupDao.finById(name) != null;
+        return groupDao.findById(name) != null;
     }
 
-    public List<List<Message>> getAllMsgValues() {
+    public List<List<IMessage>> getAllMsgValues() {
         return messageDao.findAllValues();
     }
 

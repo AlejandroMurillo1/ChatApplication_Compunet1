@@ -4,6 +4,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -216,13 +217,13 @@ public class Server {
                 }
                 break;
             
-            case "add_message":
+            case "add_text":
                 try {
                     String sender = rq.getData().get("sender").getAsString();
                     String receiver = rq.getData().get("receiver").getAsString();
                     String content = rq.getData().get("message").getAsString();
 
-                    Message newMsg = services.addMessage(sender, receiver, content);
+                    Text newMsg = services.addText(sender, receiver, content);
                     System.out.println(newMsg);
 
                     if(newMsg != null){
@@ -249,21 +250,49 @@ public class Server {
 
                     boolean isGroup = services.isGroup(receiver);
 
-                    List<Message> messages = services.getChatMessages(sender, receiver, isGroup);
+                    List<IMessage> messages = services.getChatMessages(sender, receiver, isGroup);
 
-                    System.out.println("Messages of " + sender + " and " + receiver + ": " +
-                            gson.toJsonTree(Map.of("messages", messages)).getAsJsonObject());
+                    // Transformar los mensajes a una representación ligera para el cliente
+                    List<Object> responseMessages = new ArrayList<>();
 
-                    if(messages.size() >= 1){
+                    for (IMessage m : messages) {
+                        if (m.isAudio() && m instanceof Audio audio) {
+                            // Para audios: NO mandamos data, solo metadata + id
+                            var audioDto = new java.util.HashMap<String, Object>();
+                            audioDto.put("type", "audio");
+                            audioDto.put("sender", m.getSender());
+                            audioDto.put("receiver", m.getReceiver());
+                            audioDto.put("audioId", audio.getId());
+                            responseMessages.add(audioDto);
+                        } else {
+                            // Para textos
+                            var textDto = new java.util.HashMap<String, Object>();
+                            textDto.put("type", "text");
+                            textDto.put("sender", m.getSender());
+                            textDto.put("receiver", m.getReceiver());
+                            textDto.put("text", m.getText());
+                            responseMessages.add(textDto);
+                        }
+                    }
+
+                    if (!responseMessages.isEmpty()) {
                         resp.setstatus("ok");
                         resp.setData(
-                            gson.toJsonTree(Map.of("messages", messages)).getAsJsonObject()
+                            gson.toJsonTree(
+                                java.util.Map.of("messages", responseMessages)
+                            ).getAsJsonObject()
                         );
                     } else {
                         resp.setstatus("warning");
-                        resp.setData(gson.toJsonTree(Map.of("message", sender + " and " + receiver +
-                         " haven't messages yet")).getAsJsonObject());
+                        resp.setData(
+                            gson.toJsonTree(
+                                java.util.Map.of("message",
+                                    sender + " and " + receiver + " haven't messages yet")
+                            ).getAsJsonObject()
+                        );
                     }
+
+                    
                 } catch (Exception e) {
                     resp.setstatus("error");
                     resp.setData(gson.toJsonTree(Map.of("message", "Get messages failed")).getAsJsonObject());

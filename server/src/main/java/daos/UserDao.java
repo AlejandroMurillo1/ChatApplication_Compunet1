@@ -85,7 +85,7 @@ public class UserDao implements IDao<String, User> {
     }
 
     @Override
-    public User finById(String name) {
+    public User findById(String name) {
         return users.get(name);
     }
 

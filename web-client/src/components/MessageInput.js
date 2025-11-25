@@ -30,7 +30,7 @@ export class MessageInput {
       const receiver = this.chat.receiver;
 
       try {
-        const response = await axios.post("http://localhost:3001/add_message", {
+        const response = await axios.post("http://localhost:3001/add_text", {
           sender,
           receiver,
           message: text,

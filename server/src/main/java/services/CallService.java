@@ -55,8 +55,8 @@ public class CallService {
     // ========================= MÉTODOS ICE (SEÑALIZACIÓN) =========================
 
     public UdpConnectionInfo startCall(String fromUser, String toReceiver, String serverIP) {
-        if (usersDao.finById(fromUser) == null) return null;
-        if (usersDao.finById(toReceiver) == null && groupDao.finById(toReceiver) == null) {
+        if (usersDao.findById(fromUser) == null) return null;
+        if (usersDao.findById(toReceiver) == null && groupDao.findById(toReceiver) == null) {
             System.err.println("Receiver " + toReceiver + " not found.");
             return null;
         }

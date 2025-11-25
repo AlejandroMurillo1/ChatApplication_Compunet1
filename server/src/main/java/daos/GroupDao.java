@@ -79,7 +79,7 @@ public class GroupDao implements IDao<String,Group> {
     }
 
     @Override
-    public Group finById(String name) {
+    public Group findById(String name) {
         return groups.get(name);
     }
 

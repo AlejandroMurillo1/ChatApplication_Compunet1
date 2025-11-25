@@ -10,7 +10,7 @@ import javax.sound.sampled.*;
 public class AudioProcessor {
 
     private final AudioFormat audioFormat;
-    private final String AUDIO_STORAGE_PATH = "data/voice_messages/";
+    private final String AUDIO_STORAGE_PATH = "data/";
 
     public AudioProcessor() {
         this.audioFormat = AudioConfig.getAudioFormat();

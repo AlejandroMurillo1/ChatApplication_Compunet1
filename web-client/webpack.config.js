@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
   mode: 'development',
-  entry: './web-client/index.js',
+  entry: './index.js',
   output: {
     filename: 'index.js',
     path: path.resolve(__dirname, 'dist'),
@@ -22,7 +22,7 @@ export default {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: './web-client/index.html',
+      template: './index.html',
     }),
   ],
   devServer: {
