@@ -15,11 +15,13 @@
 
 package Chat;
 
+import java.io.IOException;
+
 public interface VoiceChat extends com.zeroc.Ice.Object
 {
     void registerClient(String clientID, ClientCallbackPrx callback, com.zeroc.Ice.Current current);
 
-    UdpConnectionInfo requestCall(String fromUser, String toReceiver, com.zeroc.Ice.Current current);
+    UdpConnectionInfo requestCall(String fromUser, String toReceiver, com.zeroc.Ice.Current current) throws IOException;
 
     void endCall(String callID, com.zeroc.Ice.Current current);
 
@@ -76,8 +78,7 @@ public interface VoiceChat extends com.zeroc.Ice.Object
      * @param current -
      * @return -
     **/
-    static java.util.concurrent.CompletionStage<com.zeroc.Ice.OutputStream> _iceD_requestCall(VoiceChat obj, final com.zeroc.IceInternal.Incoming inS, com.zeroc.Ice.Current current)
-    {
+    static java.util.concurrent.CompletionStage<com.zeroc.Ice.OutputStream> _iceD_requestCall(VoiceChat obj, final com.zeroc.IceInternal.Incoming inS, com.zeroc.Ice.Current current) throws IOException {
         com.zeroc.Ice.Object._iceCheckMode(null, current.mode);
         com.zeroc.Ice.InputStream istr = inS.startReadParams();
         String iceP_fromUser;
@@ -184,7 +185,11 @@ public interface VoiceChat extends com.zeroc.Ice.Object
             }
             case 6:
             {
-                return _iceD_requestCall(this, in, current);
+                try {
+                    return _iceD_requestCall(this, in, current);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
             case 7:
             {

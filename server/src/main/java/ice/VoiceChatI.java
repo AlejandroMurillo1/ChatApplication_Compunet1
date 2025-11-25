@@ -7,6 +7,8 @@ import com.zeroc.Ice.Current;
 
 import services.CallService;
 
+import java.io.IOException;
+
 public class VoiceChatI implements VoiceChat {
 
     private final CallService callService;
@@ -23,10 +25,10 @@ public class VoiceChatI implements VoiceChat {
     }
 
     @Override
-    public UdpConnectionInfo requestCall(String fromUser, String toReceiver, Current current) {
+    public UdpConnectionInfo requestCall(String fromUser, String toReceiver, Current current) throws IOException {
         System.out.println("Ice Signal: Call request from " + fromUser + " to " + toReceiver);
 
-        UdpConnectionInfo info = callService.startCall(fromUser, toReceiver, serverIP);
+        UdpConnectionInfo info = callService.requestCall(fromUser, toReceiver, serverIP);
 
         if (info != null) {
             return info;
@@ -46,6 +48,6 @@ public class VoiceChatI implements VoiceChat {
         System.out.println("Ice Signal: Voice Message received from " + fromUser + " for " + toReceiver);
 
         // 'audioData' YA ES byte[], no se necesita conversión ni List<Byte>
-        callService.handleVoiceMessage(fromUser, toReceiver, audioData);
+        callService.saveVoiceMessage(fromUser, toReceiver, audioData);
     }
 }

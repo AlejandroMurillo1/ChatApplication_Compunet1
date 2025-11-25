@@ -18,7 +18,7 @@ public class MediaFlowHandler extends Thread {
     // Set para rastrear las IPs y Puertos de los clientes que están enviando tráfico UDP
     private final Set<String> activeClients;
 
-    public MediaFlowHandler(int port, String callID, String sender, String receiver, UserDao usersDao, GroupDao groupDao) throws IOException {
+    public MediaFlowHandler(int port, String callID) throws IOException {
         this.callID = callID;
         // Usuario o Grupo
         this.keepListening = true;

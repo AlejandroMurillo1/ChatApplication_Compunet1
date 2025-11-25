@@ -15,6 +15,7 @@ import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
 
+import daos.MessageDao;
 import dtos.Request;
 import dtos.Response;
 import model.*;
@@ -42,31 +43,36 @@ public class Server {
     }
 
     public Server() throws Exception {
-        gson = new Gson();
-        services = new ServerServices();
+        try{
+            gson = new Gson();
+            services = new ServerServices();
 
-        UserDao usersDao = services.getUsersDao();
-        GroupDao groupDao = services.getGroupDao();
-        callService = new CallService(usersDao, groupDao);
+            UserDao usersDao = services.getUsersDao();
+            GroupDao groupDao = services.getGroupDao();
+            MessageDao messageDao = services.getMessageDao();
+            callService = new CallService(usersDao, groupDao, messageDao);
 
-        // 1. Iniciar Servidor Ice en un hilo separado
-        startIceServer();
+            // 1. Iniciar Servidor Ice en un hilo separado
+            startIceServer();
 
-        // 2. Continuar con el servidor de mensajería TCP existente
-        int port = 5000;
-        // ... (código existente del ServerSocket y el bucle while)
-        ServerSocket socket = new ServerSocket(port);
-        System.out.println("Server running on port: " + port);
-        running = true;
+            // 2. Continuar con el servidor de mensajería TCP existente
+            int port = 5000;
+            ServerSocket socket = new ServerSocket(port);
+            System.out.println("Server running on port: " + port);
+            running = true;
 
-        while (running) {
-            Socket sc = socket.accept();
-            new Thread(() -> handleClient(sc)).start();
-        }
-        socket.close();
+            while (running) {
+                Socket sc = socket.accept();
+                new Thread(() -> handleClient(sc)).start();
+            }
+            socket.close();
 
-        if (communicator != null) {
-            communicator.destroy();
+            if (communicator != null) {
+                communicator.destroy();
+            }
+        } catch (Exception e){
+            System.out.println("Server error: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

@@ -1,61 +1,77 @@
 const express = require('express');
 const net = require('net');
 const cors = require('cors');
+const { Buffer } = require('buffer'); // Necesario para manejar Base64/Bytes de audio
+const http = require('http');
+const WebSocket = require('ws');
+
+// ----------------------------------------------------
+// Importaciones de la Lógica ZeroC Ice
+// (Asumiendo que estos archivos están en src/services y src/config)
+// ----------------------------------------------------
+// Si estas rutas no existen, el servidor fallará al iniciar.
+const { registerCallback } = require('./services/IceCallbackServer');
+const { requestCall, endCall, sendVoiceMessage } = require('./services/IceClient');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// CRÍTICO: Aumentar límite para buffers de voz (Base64 puede ser grande)
+app.use(express.json({ limit: '5mb' }));
 
 const port = 3001;
-
 const serverPort = 5000;
 const serverIp = "localhost";
 
-app.post("/users", (req, res) => {
-  const userData = req.body;
+// ========================================================
+// === CONFIGURACIÓN DEL SERVIDOR HTTP Y WEBSOCKETS ===
+// ========================================================
 
-  // crear un nuevo socket para cada petición
-  const socket = new net.Socket();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "register_user",
-      data: userData,
-    });
+// Mapeo para asociar WebSocket con el ID de usuario (para notificaciones)
+const clients = new Map();
 
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
+wss.on('connection', (ws) => {
+  console.log('[WS] Nuevo cliente conectado.');
 
-  socket.on("data", (data) => {
+  ws.on('message', (message) => {
+    // El cliente envía su ID al conectar: { "type": "register", "clientID": "usuario1" }
     try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end(); // cerrar después de recibir respuesta
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res.status(500).json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
+      const data = JSON.parse(message);
+      if (data.type === 'register' && data.clientID) {
+        clients.set(data.clientID, ws);
+        console.log(`[WS] Cliente ${data.clientID} registrado.`);
+
+        // CRÍTICO: Registrar el callback de Ice para que el Java Server pueda llamarlo
+        registerCallback(data.clientID).catch(err => {
+          console.warn(`Advertencia: Fallo al registrar el callback para ${data.clientID}. ${err.message}`);
+        });
+      }
+    } catch (e) {
+      console.error('[WS Error] Error parsing client message:', e);
     }
   });
 
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
-  });
-
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
+  ws.on('close', () => {
+    clients.forEach((value, key) => {
+      if (value === ws) {
+        clients.delete(key);
+      }
+    });
   });
 });
 
-app.get("/users", (req, res) => {
+app.locals.clients = clients;
+global.app = app;
+
+const handleTcpRequest = (req, res, action, data = {}) => {
   const socket = new net.Socket();
 
   socket.connect(serverPort, serverIp, () => {
     const message = JSON.stringify({
-      action: "get_online_users",
+      action: action,
+      data: data,
     });
 
     console.log("Enviando al servidor TCP:", message);
@@ -65,46 +81,6 @@ app.get("/users", (req, res) => {
   socket.on("data", (data) => {
     try {
       const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end();
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res.status(500).json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
-    }
-  });
-
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
-  });
-
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
-});
-
-app.get("/groups", (req, res) => {
-  const username = req.query.username;
-  const userData = { username };
-
-  const socket = new net.Socket();
-
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "get_user_groups",
-      data: userData
-    });
-
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
-
-  socket.on("data", (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
       res.json(response);
       socket.end();
     } catch (err) {
@@ -117,196 +93,110 @@ app.get("/groups", (req, res) => {
   socket.on("error", (err) => {
     console.error("Error en la conexión TCP:", err.message);
     res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
+    socket.destroy();
   });
 
   socket.on("close", () => {
     console.log("Conexión TCP cerrada");
   });
-});
+};
 
-app.post("/create-group", (req, res) => {
-  const groupData = req.body;
 
-  const socket = new net.Socket();
+//Mensajería TCP
 
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "create_group",   
-      data: groupData,        
-    });
+app.post("/users", (req, res) => { handleTcpRequest(req, res, "register_user", req.body); });
+app.get("/users", (req, res) => { handleTcpRequest(req, res, "get_online_users"); });
+app.get("/groups", (req, res) => { handleTcpRequest(req, res, "get_user_groups", req.query); });
+app.post("/create-group", (req, res) => { handleTcpRequest(req, res, "create_group", req.body); });
+app.post("/add_text", (req, res) => { handleTcpRequest(req, res, "add_text", req.body); });
+app.get("/get_messages", (req, res) => { handleTcpRequest(req, res, "get_messages", req.query); });
+app.put("/users/status", (req, res) => { handleTcpRequest(req, res, "logout_user", req.body); });
 
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
 
-  socket.on("data", (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end();
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res
-        .status(500)
-        .json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
+// ========================================================
+// === HANDLERS DE VOZ Y LLAMADAS (ICE y COMPATIBILIDAD) ===
+// ========================================================
+
+// 1. Iniciar llamada (ZeroC Ice)
+const startCallHandler = async (req, res) => {
+  try {
+    const { sender, receiver } = req.body;
+    // La ruta del cliente usa 'sender' y 'receiver'
+    const udpInfo = await requestCall(sender, receiver);
+
+    if (udpInfo && udpInfo.callID) {
+      res.json({ status: 'ok', data: udpInfo });
+    } else {
+      res.status(500).json({ status: 'error', message: 'Fallo al iniciar llamada Ice.' });
     }
-  });
+  } catch (e) {
+    console.error("Error en /api/call/request:", e);
+    res.status(500).json({ status: 'error', message: e.toString() });
+  }
+};
 
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res
-      .status(500)
-      .json({ status: "error", body: "Error en la conexión TCP" });
-  });
+// 2. Finalizar llamada (ZeroC Ice)
+const endCallHandler = async (req, res) => {
+  try {
+    const callID = req.body.callID || req.body.callId || req.body.callid || "ID_REQUERIDO";
+    await endCall(callID);
+    res.json({ status: 'ok', message: 'Llamada finalizada.' });
+  } catch (e) {
+    console.error("Error en /api/call/end:", e);
+    res.status(500).json({ status: 'error', message: e.toString() });
+  }
+};
 
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
-});
+const sendVoiceMessageHandler = async (req, res) => {
+  try {
+    const { sender, receiver, audioData } = req.body;
 
-app.post("/add_text", (req, res) => {
-  const messageData = req.body;
+    const audioBuffer = Buffer.from(audioData, 'base64');
 
-  const socket = new net.Socket();
+    await sendVoiceMessage(sender, receiver, audioBuffer);
+    res.json({ status: 'ok', message: 'Mensaje de voz enviado a persistencia.' });
+  } catch (e) {
+    console.error("Error en /api/voice-message/send:", e);
+    res.status(500).json({ status: 'error', message: e.toString() });
+  }
+};
 
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "add_text",   
-      data: messageData,        
-    });
+const downloadAudioHandler = (req, res) => {
+  const fileName = req.query.fileName;
+  const data = { fileName };
+  // Llama a la acción 'get_audio' en el servidor Java TCP (puerto 5000)
+  handleTcpRequest(req, res, "get_audio", data);
+};
 
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
 
-  socket.on("data", (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end();
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res
-        .status(500)
-        .json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
-    }
-  });
+// ========================================================
+// === Mapeo de Rutas (Compatibilidad con Código Existente) ===
+// ========================================================
 
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res
-      .status(500)
-      .json({ status: "error", body: "Error en la conexión TCP" });
-  });
+// Mapeo para /start_call
+app.post("/start_call", startCallHandler); // Cliente llama /start_call
+app.post("/api/call/request", startCallHandler); // Endpoint nuevo
 
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
-});
+// Mapeo para /end_call
+app.post("/end_call", endCallHandler); // Cliente llama /end_call
+app.post("/api/call/end", endCallHandler); // Endpoint nuevo
 
-app.get("/get_messages", (req, res) => {
-  const sender = req.query.sender;
-  const receiver = req.query.receiver;
-  const data = { sender, receiver };
-
-  const socket = new net.Socket();
-
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "get_messages",
-      data: data
-    });
-
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
-
-  socket.on("data", (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end();
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res.status(500).json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
-    }
-  });
-
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
-  });
-
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
-});
-
-app.put("/users/status", (req, res) => {
-  const userData = req.body;
-
-  // crear un nuevo socket para cada petición
-  const socket = new net.Socket();
-
-  socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: "logout_user",
-      data: userData,
-    });
-
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
-  });
-
-  socket.on("data", (data) => {
-    try {
-      const response = JSON.parse(data.toString());
-      console.log("Respuesta del servidor TCP:", response);
-      res.json(response);
-      socket.end(); // cerrar después de recibir respuesta
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res.status(500).json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
-    }
-  });
-
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
-  });
-
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
-});
+// Mapeo para /send_audio y /record_audio
+app.post("/send_audio", sendVoiceMessageHandler); //Envio por ice
 
 app.post("/record_audio", (req, res) => {
-  const messageData = req.body;
-  //TODO: implementar lógica de mensaje de audio en el servidor (ICE)
+  console.log("Compatibilidad: Ignorando /record_audio. La grabación ocurre en el cliente.");
+  res.json({ status: 'ok', message: 'Grabación iniciada localmente.' });
 });
 
-app.post("/send_audio", (req, res) => {
-  const messageData = req.body;
-  //TODO: implementar lógica de mensaje de audio en el servidor (ICE)
-});
+// Nuevo Endpoint para descarga de audios
+app.get("/api/audio/download", downloadAudioHandler);
 
-app.post("/start_call", (req, res) => {
-  const messageData = req.body;
-  //TODO: implementar lógica de llamada en el servidor (ICE)
-});
 
-app.post("/end_call", (req, res) => {
-  const messageData = req.body;
-  //TODO: implementar lógica de llamada en el servidor (ICE)
-});
+// ========================================================
+// === STARTUP ===
+// ========================================================
 
-app.listen(port, () => {
-  console.log(`Proxy HTTP escuchando en http://localhost:${port}`);
+server.listen(port, () => {
+  console.log(`Proxy HTTP y WS escuchando en http://localhost:${port}`);
 });

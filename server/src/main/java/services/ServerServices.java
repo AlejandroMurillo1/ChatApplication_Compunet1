@@ -18,6 +18,10 @@ public class ServerServices {
         this.messageDao = new MessageDao();
     }
 
+    public MessageDao getMessageDao() {
+        return messageDao;
+    }
+
     synchronized public User registerUser(String name, boolean online) {
         User newUser = new User(name, online);
 
