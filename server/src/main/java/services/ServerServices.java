@@ -8,9 +8,9 @@ import model.*;
 
 public class ServerServices {
 
-    private IDao<String, User> usersDao;
-    private IDao<String, Group>  groupDao;
-    private MessageDao messageDao;
+    private final IDao<String, User> usersDao;
+    private final IDao<String, Group>  groupDao;
+    private final MessageDao messageDao;
     
     public ServerServices() {
         this.usersDao = new UserDao();
