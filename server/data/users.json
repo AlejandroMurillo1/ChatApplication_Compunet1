@@ -1,1 +1,22 @@
-[{"name":"pedro","online":false},{"name":"isa","online":true},{"name":"alejo","online":true},{"name":"santo","online":false},{"name":"maria","online":false}]
+[
+  {
+    "name": "pedro",
+    "online": false
+  },
+  {
+    "name": "isa",
+    "online": true
+  },
+  {
+    "name": "alejo",
+    "online": true
+  },
+  {
+    "name": "santo",
+    "online": false
+  },
+  {
+    "name": "maria",
+    "online": false
+  }
+]

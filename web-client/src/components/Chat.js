@@ -47,16 +47,22 @@ export class Chat {
   }
 
   renderMessages(messages) {
-    this.div.innerHTML = "";
+    this.div.innerHTML = "";  
     const currentUser = sessionStorage.getItem("username");
 
-    messages.forEach(({ sender, message }) => {
+    messages.forEach((msg) => {
+      const { type, sender } = msg;
+
       // contenedor del mensaje completo (nombre + burbuja)
       const msgWrapper = document.createElement("div");
       msgWrapper.classList.add("chat-message-wrapper");
 
-      // nombre del remitente (solo si es grupo o no soy yo)
-      if (this.isGroup && sender !== currentUser) {
+      const isCurrentUser = sender === currentUser;
+
+      // nombre del remitente:
+      // - si es grupo y no soy yo (como antes)
+      // - o si es audio (siempre mostrar remitente)
+      if ((this.isGroup && sender !== currentUser) || type === "audio") {
         const senderLabel = document.createElement("div");
         senderLabel.classList.add("chat-sender");
         senderLabel.textContent = sender;
@@ -66,12 +72,58 @@ export class Chat {
       // burbuja del mensaje
       const msgBubble = document.createElement("div");
       msgBubble.classList.add("chat-message");
-      msgBubble.textContent = message;
-
-      if (sender === currentUser) {
+      if (isCurrentUser) {
         msgBubble.classList.add("sent");
       } else {
         msgBubble.classList.add("received");
+      }
+
+      if (type === "text") {
+        // Mensaje de texto: igual que antes
+        msgBubble.textContent = msg.text ?? "";
+      } else if (type === "audio") {
+        // Mensaje de audio: estilo WhatsApp
+        const audioContent = document.createElement("div");
+        audioContent.classList.add("audio-message-content");
+
+        const playButton = document.createElement("button");
+        playButton.classList.add("audio-play-button");
+        playButton.textContent = "▶";
+
+        const audioLabel = document.createElement("span");
+        audioLabel.classList.add("audio-label");
+        audioLabel.textContent = "Mensaje de voz";
+
+        const audio = document.createElement("audio");
+
+        /* ⚠️ Ajusta esta URL al endpoint real donde sirves el audio
+        audio.src = `http://localhost:3001/get-audio?audioId=${encodeURIComponent(
+          msg.audioId
+        )}`;
+        audio.preload = "metadata";
+
+        playButton.addEventListener("click", () => {
+          if (audio.paused) {
+            audio.play();
+            playButton.textContent = "⏸";
+          } else {
+            audio.pause();
+            playButton.textContent = "▶";
+          }
+        });
+
+        audio.addEventListener("ended", () => {
+          playButton.textContent = "▶";
+        });
+
+        *///Revisar
+
+        audioContent.appendChild(playButton);
+        audioContent.appendChild(audioLabel);
+        msgBubble.appendChild(audioContent);
+      } else {
+        // Por si llega algo raro
+        msgBubble.textContent = "";
       }
 
       msgWrapper.appendChild(msgBubble);

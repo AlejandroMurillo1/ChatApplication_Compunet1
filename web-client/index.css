@@ -457,8 +457,85 @@ html, body {
   background-color: #cce5e9;
 }
 
+.button-on-off.recording {
+  background-color: rgb(155, 63, 63);
+  color: white;
+}
 
+/* Vista de llamada */
+.call-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 80vh;            /* similar a .chat-wrapper */
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  font-family: 'Segoe UI', sans-serif;
+  color: #545454;
+}
 
+.call-info {
+  margin-top: 60px;
+  text-align: center;
+}
 
+.call-name {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #545454;
+}
 
+.call-status {
+  font-size: 16px;
+  color: #737373;
+}
 
+.call-bottom-bar {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.call-end-button {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: none;
+  background-color: #d78c80;
+  color: white;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.call-end-button:hover {
+  background-color: #e2a9a0;
+  transform: scale(1.05);
+}
+
+/* Botón Llamar de la barra superior */
+.call-button {
+  margin-left: 950px;
+  margin-right: 10px;
+  padding: 6px 14px;
+  border-radius: 17px;
+  border: none;
+  background-color: #689ea7;
+  color: white;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  cursor: pointer;  
+  transition: background-color 0.2s ease;
+}
+
+.call-button:hover {
+  background-color: #558b94;
+}

@@ -1,7 +1,8 @@
+import axios from "axios";
 import { Menu } from "../components/Menu.js";
 import { UserList } from "../components/UserList.js";
 import { Chat } from "../components/Chat.js";
-import { MessageInput } from "../components/MessageInput.js";
+import { Call } from "../components/Call.js";
 
 export class ChatPage {
   constructor(router) {
@@ -17,26 +18,78 @@ export class ChatPage {
 
     const header = new Menu(this.router).render();
     const chatArea = document.createElement("div");
-    chatArea.classList.add("chat")
+    chatArea.classList.add("chat");
 
     chatArea.innerHTML = `
-    <div class="no-user-selected">
-      <p class="light-text">No ha seleccionado ningún usuario</p>
-    </div>`;
+      <div class="no-user-selected">
+        <p class="light-text">No ha seleccionado ningún usuario</p>
+      </div>
+    `;
 
-    // callback cuando se selecciona un usuario
     const onUserSelected = (username) => {
       this.selectedUser = username;
-      chatArea.innerHTML = `
-        <div class="top-chat sidebar-text">Chat con ${username}</div>
-      `;
-      
-      const chat = new Chat(this.selectedUser, false).render();
-      chatArea.append(chat);
+      chatArea.innerHTML = "";
+
+      // Barra superior: botón Llamar + texto
+      const topBar = document.createElement("div");
+      topBar.classList.add("top-chat", "sidebar-text");
+
+      const callButton = document.createElement("button");
+      callButton.classList.add("call-button");
+      callButton.textContent = "Llamar";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.textContent = `Chat con ${username}`;
+
+      topBar.appendChild(titleSpan);
+      topBar.appendChild(callButton);
+
+      chatArea.appendChild(topBar);
+
+      // Chat por defecto
+      const renderChat = () => {
+        // limpiamos todo menos la barra superior
+        chatArea.innerHTML = "";
+        chatArea.appendChild(topBar);
+
+        const chat = new Chat(this.selectedUser, false).render();
+        chatArea.appendChild(chat);
+      };
+
+      renderChat();
+
+      // Lógica del botón Llamar
+      callButton.addEventListener("click", async () => {
+        const sender = sessionStorage.getItem("username");
+        const receiver = this.selectedUser;
+
+        try {
+          const response = await axios.post(
+            "http://localhost:3001/start_call",
+            { sender, receiver }
+          );
+          console.log("Respuesta del proxy /start-call:", response.data);
+
+          titleSpan.textContent = `Llamando a ${username}...`;
+
+          chatArea.innerHTML = "";
+          chatArea.appendChild(topBar);
+
+          const callComponent = new Call(receiver).render();
+
+          // Escuchar cuando se cuelga
+          callComponent.addEventListener("call:hangup", () => {
+            titleSpan.textContent = `Chat con ${username}`;
+            renderChat();
+          });
+
+          chatArea.appendChild(callComponent);
+        } catch (error) {
+          console.error("Error al iniciar la llamada:", error);
+        }
+      });
     };
 
-
-    // pasamos el callback al crear el UserList
     const sidebar = new UserList(this.router, onUserSelected).render();
 
     container.append(sidebar, chatArea);
@@ -44,5 +97,4 @@ export class ChatPage {
 
     return box;
   }
-
 }

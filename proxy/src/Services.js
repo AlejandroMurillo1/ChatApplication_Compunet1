@@ -287,6 +287,26 @@ app.put("/users/status", (req, res) => {
   });
 });
 
+app.post("/record_audio", (req, res) => {
+  const messageData = req.body;
+  //TODO: implementar lógica de mensaje de audio en el servidor (ICE)
+});
+
+app.post("/send_audio", (req, res) => {
+  const messageData = req.body;
+  //TODO: implementar lógica de mensaje de audio en el servidor (ICE)
+});
+
+app.post("/start_call", (req, res) => {
+  const messageData = req.body;
+  //TODO: implementar lógica de llamada en el servidor (ICE)
+});
+
+app.post("/end_call", (req, res) => {
+  const messageData = req.body;
+  //TODO: implementar lógica de llamada en el servidor (ICE)
+});
+
 app.listen(port, () => {
   console.log(`Proxy HTTP escuchando en http://localhost:${port}`);
 });
