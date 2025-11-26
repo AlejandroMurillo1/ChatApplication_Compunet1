@@ -1,4 +1,6 @@
 const { getCommunicator, VOICE_CHAT_PROXY_STRING } = require('../config/ice');
+const Ice = require('ice'); // Importar Ice
+const Chat = require('../../Chat'); // CRÍTICO: Importar el módulo generado
 
 let voiceChatPrx = null;
 
@@ -8,8 +10,8 @@ async function getVoiceChatPrx() {
         const communicator = await getCommunicator();
         const proxy = communicator.stringToProxy(VOICE_CHAT_PROXY_STRING);
 
-        // El checkedCast asegura que el proxy es del tipo correcto antes de usarlo
-        voiceChatPrx = await Ice.Chat.VoiceChatPrx.checkedCast(proxy);
+        // El checkedCast ahora usa la clase correcta importada desde Chat.js
+        voiceChatPrx = await Chat.VoiceChatPrx.checkedCast(proxy);
 
         if (!voiceChatPrx) {
             throw new Error("Proxy de VoiceChat no encontrado. Verifique que el servidor Ice (Java) esté activo.");
@@ -35,7 +37,6 @@ async function endCall(callID) {
 // Lógica de negocio para enviar mensaje de voz
 async function sendVoiceMessage(fromUser, toReceiver, audioBuffer) {
     const prx = await getVoiceChatPrx();
-    // audioBuffer debe ser un Buffer de Node.js (se mapea a sequence<byte>/AudioBuffer)
     await prx.sendVoiceMessage(fromUser, toReceiver, audioBuffer);
 }
 

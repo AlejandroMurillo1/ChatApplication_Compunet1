@@ -84,7 +84,7 @@ public class Server {
                         ICE_ADAPTER_NAME, ICE_ENDPOINT
                 );
 
-                VoiceChatI voiceChatServant = new VoiceChatI(callService, SERVER_IP);
+                VoiceChatI voiceChatServant = new VoiceChatI(callService);
 
                 adapter.add(voiceChatServant, Util.stringToIdentity("VoiceChat"));
 

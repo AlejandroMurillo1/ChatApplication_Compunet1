@@ -15,13 +15,11 @@
 
 package Chat;
 
-import java.io.IOException;
-
 public interface VoiceChat extends com.zeroc.Ice.Object
 {
     void registerClient(String clientID, ClientCallbackPrx callback, com.zeroc.Ice.Current current);
 
-    UdpConnectionInfo requestCall(String fromUser, String toReceiver, com.zeroc.Ice.Current current) throws IOException;
+    CallInfo requestCall(String fromUser, String toReceiver, com.zeroc.Ice.Current current);
 
     void endCall(String callID, com.zeroc.Ice.Current current);
 
@@ -78,7 +76,8 @@ public interface VoiceChat extends com.zeroc.Ice.Object
      * @param current -
      * @return -
     **/
-    static java.util.concurrent.CompletionStage<com.zeroc.Ice.OutputStream> _iceD_requestCall(VoiceChat obj, final com.zeroc.IceInternal.Incoming inS, com.zeroc.Ice.Current current) throws IOException {
+    static java.util.concurrent.CompletionStage<com.zeroc.Ice.OutputStream> _iceD_requestCall(VoiceChat obj, final com.zeroc.IceInternal.Incoming inS, com.zeroc.Ice.Current current)
+    {
         com.zeroc.Ice.Object._iceCheckMode(null, current.mode);
         com.zeroc.Ice.InputStream istr = inS.startReadParams();
         String iceP_fromUser;
@@ -86,9 +85,9 @@ public interface VoiceChat extends com.zeroc.Ice.Object
         iceP_fromUser = istr.readString();
         iceP_toReceiver = istr.readString();
         inS.endReadParams();
-        UdpConnectionInfo ret = obj.requestCall(iceP_fromUser, iceP_toReceiver, current);
+        CallInfo ret = obj.requestCall(iceP_fromUser, iceP_toReceiver, current);
         com.zeroc.Ice.OutputStream ostr = inS.startWriteParams();
-        UdpConnectionInfo.ice_write(ostr, ret);
+        CallInfo.ice_write(ostr, ret);
         inS.endWriteParams(ostr);
         return inS.setResult(ostr);
     }
@@ -185,11 +184,7 @@ public interface VoiceChat extends com.zeroc.Ice.Object
             }
             case 6:
             {
-                try {
-                    return _iceD_requestCall(this, in, current);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                return _iceD_requestCall(this, in, current);
             }
             case 7:
             {

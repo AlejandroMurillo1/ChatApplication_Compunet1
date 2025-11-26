@@ -3,7 +3,7 @@ import { MessageInput } from "./MessageInput.js";
 
 export class Chat {
   constructor(receiver, isGroup = false) {
-    this.receiver = receiver; // puede ser un username o nombre del grupo
+    this.receiver = receiver; // username o nombre del grupo
     this.isGroup = isGroup;
     this.messages = [];
   }
@@ -12,14 +12,16 @@ export class Chat {
     this.wrapper = document.createElement("div");
     this.wrapper.classList.add("chat-wrapper");
 
+    // Contenedor de burbujas de mensaje
     this.div = document.createElement("div");
     this.div.classList.add("msg-container");
 
+    // Componente de entrada (Texto y Grabación)
     const messageInput = new MessageInput(this).render();
 
     this.wrapper.append(this.div, messageInput);
 
-    // cargar mensajes según tipo
+    // Cargar historial inicial
     this.loadMessages();
 
     return this.wrapper;
@@ -30,107 +32,82 @@ export class Chat {
       const sender = sessionStorage.getItem("username");
 
       const response = await axios.get("http://localhost:3001/get_messages", {
-          params: { sender, receiver: this.receiver },
-        });
-      console.log("Mensaje recibido del proxy:", response.data);
+        params: { sender, receiver: this.receiver },
+      });
+
+      // Ajuste para depuración
+      // console.log("Mensajes recibidos:", response.data);
 
       if (response.data.status === "ok") {
-        this.renderMessages(response.data.data.messages);
+        // Asumiendo que el backend devuelve { data: { messages: [...] } }
+        const msgs = response.data.data?.messages || response.data.body?.messages || [];
+        this.renderMessages(msgs);
       } else if (response.data.status === "warning"){
-        this.div.innerHTML = `<p class="light-text">No hay mensajes</p>`;
+        this.div.innerHTML = `<p class="light-text">No hay mensajes aún.</p>`;
       }
 
     } catch (error) {
       console.error("Error al obtener mensajes:", error);
-      this.div.innerHTML = `<p class="light-text">Error al obtener mensajes</p>`;
+      this.div.innerHTML = `<p class="light-text">Error de conexión al cargar mensajes.</p>`;
     }
   }
 
   renderMessages(messages) {
-    this.div.innerHTML = "";  
+    this.div.innerHTML = ""; // Limpiar antes de pintar
     const currentUser = sessionStorage.getItem("username");
 
+    if (messages.length === 0) {
+      this.div.innerHTML = `<p class="light-text">No hay mensajes.</p>`;
+      return;
+    }
+
     messages.forEach((msg) => {
-      const { type, sender } = msg;
-
-      // contenedor del mensaje completo (nombre + burbuja)
       const msgWrapper = document.createElement("div");
-      msgWrapper.classList.add("chat-message-wrapper");
+      const isMine = msg.sender === currentUser;
 
-      const isCurrentUser = sender === currentUser;
+      msgWrapper.classList.add("message-wrapper");
+      msgWrapper.classList.add(isMine ? "mine" : "theirs");
 
-      // nombre del remitente:
-      // - si es grupo y no soy yo (como antes)
-      // - o si es audio (siempre mostrar remitente)
-      if ((this.isGroup && sender !== currentUser) || type === "audio") {
-        const senderLabel = document.createElement("div");
-        senderLabel.classList.add("chat-sender");
-        senderLabel.textContent = sender;
-        msgWrapper.appendChild(senderLabel);
-      }
-
-      // burbuja del mensaje
       const msgBubble = document.createElement("div");
-      msgBubble.classList.add("chat-message");
-      if (isCurrentUser) {
-        msgBubble.classList.add("sent");
-      } else {
-        msgBubble.classList.add("received");
+      msgBubble.classList.add("message-bubble");
+
+      // Mostrar nombre si es grupo y no soy yo
+      if (this.isGroup && !isMine) {
+        const senderName = document.createElement("div");
+        senderName.classList.add("sender-name");
+        senderName.textContent = msg.sender;
+        msgBubble.appendChild(senderName);
       }
 
-      if (type === "text") {
-        // Mensaje de texto: igual que antes
-        msgBubble.textContent = msg.text ?? "";
-      } else if (type === "audio") {
-        // Mensaje de audio: estilo WhatsApp
+      // ------------------------------------------
+      // LÓGICA DE VISUALIZACIÓN (AUDIO VS TEXTO)
+      // ------------------------------------------
+      if (msg.type === "audio") {
         const audioContent = document.createElement("div");
-        audioContent.classList.add("audio-message-content");
-
-        const playButton = document.createElement("button");
-        playButton.classList.add("audio-play-button");
-        playButton.textContent = "▶";
-
-        const audioLabel = document.createElement("span");
-        audioLabel.classList.add("audio-label");
-        audioLabel.textContent = "Mensaje de voz";
+        audioContent.classList.add("audio-player-container"); // Puedes estilizar esto en CSS
 
         const audio = document.createElement("audio");
+        audio.controls = true;
 
-        /* ⚠️ Ajusta esta URL al endpoint real donde sirves el audio
-        audio.src = `http://localhost:3001/get-audio?audioId=${encodeURIComponent(
-          msg.audioId
-        )}`;
+        audio.src = `http://localhost:3001/api/audio/${msg.audioId}`;
+
         audio.preload = "metadata";
 
-        playButton.addEventListener("click", () => {
-          if (audio.paused) {
-            audio.play();
-            playButton.textContent = "⏸";
-          } else {
-            audio.pause();
-            playButton.textContent = "▶";
-          }
-        });
-
-        audio.addEventListener("ended", () => {
-          playButton.textContent = "▶";
-        });
-
-        *///Revisar
-
-        audioContent.appendChild(playButton);
-        audioContent.appendChild(audioLabel);
+        audioContent.appendChild(audio);
         msgBubble.appendChild(audioContent);
+
       } else {
-        // Por si llega algo raro
-        msgBubble.textContent = "";
+        // Mensaje de Texto
+        const textSpan = document.createElement("span");
+        textSpan.textContent = msg.text;
+        msgBubble.appendChild(textSpan);
       }
 
       msgWrapper.appendChild(msgBubble);
       this.div.appendChild(msgWrapper);
     });
 
+    // Auto-scroll al final
     this.div.scrollTop = this.div.scrollHeight;
   }
-
 }

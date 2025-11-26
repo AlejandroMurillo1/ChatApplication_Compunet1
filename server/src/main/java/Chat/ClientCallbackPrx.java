@@ -17,40 +17,40 @@ package Chat;
 
 public interface ClientCallbackPrx extends com.zeroc.Ice.ObjectPrx
 {
-    default void incomingCall(String callerName, UdpConnectionInfo info)
+    default void incomingCall(String callerName, String callID)
     {
-        incomingCall(callerName, info, com.zeroc.Ice.ObjectPrx.noExplicitContext);
+        incomingCall(callerName, callID, com.zeroc.Ice.ObjectPrx.noExplicitContext);
     }
 
-    default void incomingCall(String callerName, UdpConnectionInfo info, java.util.Map<String, String> context)
+    default void incomingCall(String callerName, String callID, java.util.Map<String, String> context)
     {
-        _iceI_incomingCallAsync(callerName, info, context, true).waitForResponse();
+        _iceI_incomingCallAsync(callerName, callID, context, true).waitForResponse();
     }
 
-    default java.util.concurrent.CompletableFuture<Void> incomingCallAsync(String callerName, UdpConnectionInfo info)
+    default java.util.concurrent.CompletableFuture<Void> incomingCallAsync(String callerName, String callID)
     {
-        return _iceI_incomingCallAsync(callerName, info, com.zeroc.Ice.ObjectPrx.noExplicitContext, false);
+        return _iceI_incomingCallAsync(callerName, callID, com.zeroc.Ice.ObjectPrx.noExplicitContext, false);
     }
 
-    default java.util.concurrent.CompletableFuture<Void> incomingCallAsync(String callerName, UdpConnectionInfo info, java.util.Map<String, String> context)
+    default java.util.concurrent.CompletableFuture<Void> incomingCallAsync(String callerName, String callID, java.util.Map<String, String> context)
     {
-        return _iceI_incomingCallAsync(callerName, info, context, false);
+        return _iceI_incomingCallAsync(callerName, callID, context, false);
     }
 
     /**
      * @hidden
      * @param iceP_callerName -
-     * @param iceP_info -
+     * @param iceP_callID -
      * @param context -
      * @param sync -
      * @return -
      **/
-    default com.zeroc.IceInternal.OutgoingAsync<Void> _iceI_incomingCallAsync(String iceP_callerName, UdpConnectionInfo iceP_info, java.util.Map<String, String> context, boolean sync)
+    default com.zeroc.IceInternal.OutgoingAsync<Void> _iceI_incomingCallAsync(String iceP_callerName, String iceP_callID, java.util.Map<String, String> context, boolean sync)
     {
         com.zeroc.IceInternal.OutgoingAsync<Void> f = new com.zeroc.IceInternal.OutgoingAsync<>(this, "incomingCall", null, sync, null);
         f.invoke(false, context, null, ostr -> {
                      ostr.writeString(iceP_callerName);
-                     UdpConnectionInfo.ice_write(ostr, iceP_info);
+                     ostr.writeString(iceP_callID);
                  }, null);
         return f;
     }

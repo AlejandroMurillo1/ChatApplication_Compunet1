@@ -1,202 +1,155 @@
 const express = require('express');
 const net = require('net');
 const cors = require('cors');
-const { Buffer } = require('buffer'); // Necesario para manejar Base64/Bytes de audio
+const { Buffer } = require('buffer');
 const http = require('http');
 const WebSocket = require('ws');
+const path = require('path');
 
-// ----------------------------------------------------
-// Importaciones de la Lógica ZeroC Ice
-// (Asumiendo que estos archivos están en src/services y src/config)
-// ----------------------------------------------------
-// Si estas rutas no existen, el servidor fallará al iniciar.
 const { registerCallback } = require('./services/IceCallbackServer');
 const { requestCall, endCall, sendVoiceMessage } = require('./services/IceClient');
 
 const app = express();
 app.use(cors());
-// CRÍTICO: Aumentar límite para buffers de voz (Base64 puede ser grande)
-app.use(express.json({ limit: '5mb' }));
+// IMPORTANTE: Aumentamos el límite para recibir audios en Base64
+app.use(express.json({ limit: '10mb' }));
 
-const port = 3001;
-const serverPort = 5000;
+// ------------------------------------------------------------------
+// 1. SERVIDOR DE ARCHIVOS ESTÁTICOS (Para reproducir audios)
+// ------------------------------------------------------------------
+const AUDIO_FOLDER = path.join(__dirname, '../../Server/data');
+
+app.use('/api/audio', express.static(AUDIO_FOLDER));
+console.log(`[File Server] Sirviendo audios desde: ${AUDIO_FOLDER}`);
+
+const port = 3001;     // Puerto del Proxy
+const serverPort = 5000; // Puerto TCP de Java (Mensajería)
 const serverIp = "localhost";
-
-// ========================================================
-// === CONFIGURACIÓN DEL SERVIDOR HTTP Y WEBSOCKETS ===
-// ========================================================
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Mapeo para asociar WebSocket con el ID de usuario (para notificaciones)
+// Mapeo: ID_Usuario -> WebSocket
 const clients = new Map();
 
+// ==================================================================
+// 2. WEBSOCKETS: Señalización y Relay de Audio (Streaming)
+// ==================================================================
 wss.on('connection', (ws) => {
-  console.log('[WS] Nuevo cliente conectado.');
+  let myClientID = null;
 
   ws.on('message', (message) => {
-    // El cliente envía su ID al conectar: { "type": "register", "clientID": "usuario1" }
     try {
       const data = JSON.parse(message);
-      if (data.type === 'register' && data.clientID) {
-        clients.set(data.clientID, ws);
-        console.log(`[WS] Cliente ${data.clientID} registrado.`);
 
-        // CRÍTICO: Registrar el callback de Ice para que el Java Server pueda llamarlo
-        registerCallback(data.clientID).catch(err => {
-          console.warn(`Advertencia: Fallo al registrar el callback para ${data.clientID}. ${err.message}`);
-        });
+      // A. REGISTRO DEL CLIENTE
+      if (data.type === 'register' && data.clientID) {
+        myClientID = data.clientID;
+        clients.set(myClientID, ws);
+        console.log(`[WS] Cliente registrado: ${myClientID}`);
+
+        // Registramos también en Ice para que Java pueda enviarle notificaciones
+        registerCallback(myClientID).catch(err => console.error("[Ice Register Error]", err));
+      }
+
+          // B. RELAY DE AUDIO (STREAMING EN VIVO)
+      // El cliente envía: { type: 'audio_stream', target: 'usuarioDestino', audio: 'base64...' }
+      else if (data.type === 'audio_stream') {
+        const targetSock = clients.get(data.target);
+
+        if (targetSock && targetSock.readyState === WebSocket.OPEN) {
+          // Reenviamos el paquete de audio al destinatario inmediatamente
+          targetSock.send(JSON.stringify({
+            type: 'audio_stream',
+            sender: myClientID,
+            audio: data.audio
+          }));
+        }
       }
     } catch (e) {
-      console.error('[WS Error] Error parsing client message:', e);
+      console.error('[WS Error] Mensaje no válido:', e.message);
     }
   });
 
   ws.on('close', () => {
-    clients.forEach((value, key) => {
-      if (value === ws) {
-        clients.delete(key);
-      }
-    });
+    if (myClientID) {
+      console.log(`[WS] Cliente desconectado: ${myClientID}`);
+      clients.delete(myClientID);
+    }
   });
 });
 
 app.locals.clients = clients;
 global.app = app;
 
+// Helper para consultas TCP (Mensajería Texto / Usuarios)
 const handleTcpRequest = (req, res, action, data = {}) => {
   const socket = new net.Socket();
-
   socket.connect(serverPort, serverIp, () => {
-    const message = JSON.stringify({
-      action: action,
-      data: data,
-    });
-
-    console.log("Enviando al servidor TCP:", message);
-    socket.write(message + "\n");
+    socket.write(JSON.stringify({ action, data }) + "\n");
   });
 
-  socket.on("data", (data) => {
+  socket.on("data", (d) => {
     try {
-      const response = JSON.parse(data.toString());
-      res.json(response);
-      socket.end();
-    } catch (err) {
-      console.error("Error procesando respuesta:", err);
-      res.status(500).json({ status: "error", body: "Respuesta inválida del servidor TCP" });
-      socket.destroy();
-    }
+      res.json(JSON.parse(d.toString()));
+    } catch (e) { res.status(500).json({error: "Invalid JSON from Java TCP"}); }
+    socket.end();
   });
 
-  socket.on("error", (err) => {
-    console.error("Error en la conexión TCP:", err.message);
-    res.status(500).json({ status: "error", body: "Error en la conexión TCP" });
-    socket.destroy();
-  });
-
-  socket.on("close", () => {
-    console.log("Conexión TCP cerrada");
-  });
+  socket.on("error", (e) => res.status(500).json({ error: "TCP Connection Error: " + e.message }));
 };
 
+// Rutas TCP Mensajes
+app.post("/users", (req, res) => handleTcpRequest(req, res, "register_user", req.body));
+app.get("/users", (req, res) => handleTcpRequest(req, res, "get_online_users"));
+app.get("/groups", (req, res) => handleTcpRequest(req, res, "get_user_groups", req.query));
+app.post("/create-group", (req, res) => handleTcpRequest(req, res, "create_group", req.body));
+app.post("/add_text", (req, res) => handleTcpRequest(req, res, "add_text", req.body));
+app.get("/get_messages", (req, res) => handleTcpRequest(req, res, "get_messages", req.query));
+app.put("/users/status", (req, res) => handleTcpRequest(req, res, "logout_user", req.body));
 
-//Mensajería TCP
+// --- RUTAS DE LLAMADAS Y VOZ (ICE) ---
 
-app.post("/users", (req, res) => { handleTcpRequest(req, res, "register_user", req.body); });
-app.get("/users", (req, res) => { handleTcpRequest(req, res, "get_online_users"); });
-app.get("/groups", (req, res) => { handleTcpRequest(req, res, "get_user_groups", req.query); });
-app.post("/create-group", (req, res) => { handleTcpRequest(req, res, "create_group", req.body); });
-app.post("/add_text", (req, res) => { handleTcpRequest(req, res, "add_text", req.body); });
-app.get("/get_messages", (req, res) => { handleTcpRequest(req, res, "get_messages", req.query); });
-app.put("/users/status", (req, res) => { handleTcpRequest(req, res, "logout_user", req.body); });
-
-
-// ========================================================
-// === HANDLERS DE VOZ Y LLAMADAS (ICE y COMPATIBILIDAD) ===
-// ========================================================
-
-// 1. Iniciar llamada (ZeroC Ice)
-const startCallHandler = async (req, res) => {
+// Iniciar Llamada
+app.post("/api/call/request", async (req, res) => {
   try {
     const { sender, receiver } = req.body;
-    // La ruta del cliente usa 'sender' y 'receiver'
-    const udpInfo = await requestCall(sender, receiver);
-
-    if (udpInfo && udpInfo.callID) {
-      res.json({ status: 'ok', data: udpInfo });
-    } else {
-      res.status(500).json({ status: 'error', message: 'Fallo al iniciar llamada Ice.' });
-    }
+    // Java valida y devuelve { callID, status }
+    const callInfo = await requestCall(sender, receiver);
+    res.json({ status: 'ok', data: callInfo });
   } catch (e) {
-    console.error("Error en /api/call/request:", e);
-    res.status(500).json({ status: 'error', message: e.toString() });
+    res.status(500).json({ error: e.message });
   }
-};
-
-// 2. Finalizar llamada (ZeroC Ice)
-const endCallHandler = async (req, res) => {
-  try {
-    const callID = req.body.callID || req.body.callId || req.body.callid || "ID_REQUERIDO";
-    await endCall(callID);
-    res.json({ status: 'ok', message: 'Llamada finalizada.' });
-  } catch (e) {
-    console.error("Error en /api/call/end:", e);
-    res.status(500).json({ status: 'error', message: e.toString() });
-  }
-};
-
-const sendVoiceMessageHandler = async (req, res) => {
-  try {
-    const { sender, receiver, audioData } = req.body;
-
-    const audioBuffer = Buffer.from(audioData, 'base64');
-
-    await sendVoiceMessage(sender, receiver, audioBuffer);
-    res.json({ status: 'ok', message: 'Mensaje de voz enviado a persistencia.' });
-  } catch (e) {
-    console.error("Error en /api/voice-message/send:", e);
-    res.status(500).json({ status: 'error', message: e.toString() });
-  }
-};
-
-const downloadAudioHandler = (req, res) => {
-  const fileName = req.query.fileName;
-  const data = { fileName };
-  // Llama a la acción 'get_audio' en el servidor Java TCP (puerto 5000)
-  handleTcpRequest(req, res, "get_audio", data);
-};
-
-
-// ========================================================
-// === Mapeo de Rutas (Compatibilidad con Código Existente) ===
-// ========================================================
-
-// Mapeo para /start_call
-app.post("/start_call", startCallHandler); // Cliente llama /start_call
-app.post("/api/call/request", startCallHandler); // Endpoint nuevo
-
-// Mapeo para /end_call
-app.post("/end_call", endCallHandler); // Cliente llama /end_call
-app.post("/api/call/end", endCallHandler); // Endpoint nuevo
-
-// Mapeo para /send_audio y /record_audio
-app.post("/send_audio", sendVoiceMessageHandler); //Envio por ice
-
-app.post("/record_audio", (req, res) => {
-  console.log("Compatibilidad: Ignorando /record_audio. La grabación ocurre en el cliente.");
-  res.json({ status: 'ok', message: 'Grabación iniciada localmente.' });
 });
 
-// Nuevo Endpoint para descarga de audios
-app.get("/api/audio/download", downloadAudioHandler);
+// Terminar Llamada
+app.post("/api/call/end", async (req, res) => {
+  try {
+    await endCall(req.body.callID);
+    res.json({ status: 'ok' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
+// Enviar Nota de Voz (Persistencia)
+app.post("/send_audio", async (req, res) => {
+  try {
+    const { sender, receiver, audioData } = req.body;
+    // Convertimos Base64 a Buffer para enviar por Ice
+    const buffer = Buffer.from(audioData, 'base64');
+    await sendVoiceMessage(sender, receiver, buffer);
+    res.json({ status: 'ok', message: 'Audio guardado exitosamente' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
-// ========================================================
-// === STARTUP ===
-// ========================================================
+// Compatibilidad con rutas antiguas (opcional)
+app.post("/start_call", (req, res) => res.redirect(307, "/api/call/request"));
+app.post("/end_call", (req, res) => res.redirect(307, "/api/call/end"));
 
+// Iniciar Servidor
 server.listen(port, () => {
-  console.log(`Proxy HTTP y WS escuchando en http://localhost:${port}`);
+  console.log(`[Proxy] Escuchando en http://localhost:${port}`);
+  console.log(`[WS] Servidor WebSocket listo`);
 });

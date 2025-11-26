@@ -17,7 +17,7 @@ package Chat;
 
 public interface ClientCallback extends com.zeroc.Ice.Object
 {
-    void incomingCall(String callerName, UdpConnectionInfo info, com.zeroc.Ice.Current current);
+    void incomingCall(String callerName, String callID, com.zeroc.Ice.Current current);
 
     void callEnded(String callID, com.zeroc.Ice.Current current);
 
@@ -59,11 +59,11 @@ public interface ClientCallback extends com.zeroc.Ice.Object
         com.zeroc.Ice.Object._iceCheckMode(null, current.mode);
         com.zeroc.Ice.InputStream istr = inS.startReadParams();
         String iceP_callerName;
-        UdpConnectionInfo iceP_info;
+        String iceP_callID;
         iceP_callerName = istr.readString();
-        iceP_info = UdpConnectionInfo.ice_read(istr);
+        iceP_callID = istr.readString();
         inS.endReadParams();
-        obj.incomingCall(iceP_callerName, iceP_info, current);
+        obj.incomingCall(iceP_callerName, iceP_callID, current);
         return inS.setResult(inS.writeEmptyParams());
     }
 

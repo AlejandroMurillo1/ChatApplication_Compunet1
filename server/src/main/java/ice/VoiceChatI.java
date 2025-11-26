@@ -1,22 +1,18 @@
 package ice;
 
+import Chat.CallInfo;
 import Chat.ClientCallbackPrx;
-import Chat.UdpConnectionInfo;
 import Chat.VoiceChat;
 import com.zeroc.Ice.Current;
 
 import services.CallService;
 
-import java.io.IOException;
-
 public class VoiceChatI implements VoiceChat {
 
     private final CallService callService;
-    private final String serverIP;
 
-    public VoiceChatI(CallService callService, String serverIP) {
+    public VoiceChatI(CallService callService) {
         this.callService = callService;
-        this.serverIP = serverIP;
     }
 
     @Override
@@ -25,29 +21,17 @@ public class VoiceChatI implements VoiceChat {
     }
 
     @Override
-    public UdpConnectionInfo requestCall(String fromUser, String toReceiver, Current current) throws IOException {
-        System.out.println("Ice Signal: Call request from " + fromUser + " to " + toReceiver);
-
-        UdpConnectionInfo info = callService.requestCall(fromUser, toReceiver, serverIP);
-
-        if (info != null) {
-            return info;
-        }
-
-        return new UdpConnectionInfo();
+    public CallInfo requestCall(String fromUser, String toReceiver, Current current) {
+        return callService.requestCall(fromUser, toReceiver);
     }
 
     @Override
     public void endCall(String callID, Current current) {
-        System.out.println("Ice Signal: Ending call " + callID);
         callService.endCall(callID);
     }
 
     @Override
     public void sendVoiceMessage(String fromUser, String toReceiver, byte[] audioData, Current current) {
-        System.out.println("Ice Signal: Voice Message received from " + fromUser + " for " + toReceiver);
-
-        // 'audioData' YA ES byte[], no se necesita conversión ni List<Byte>
         callService.saveVoiceMessage(fromUser, toReceiver, audioData);
     }
 }

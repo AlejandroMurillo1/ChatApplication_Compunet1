@@ -55,22 +55,22 @@ public interface VoiceChatPrx extends com.zeroc.Ice.ObjectPrx
         return f;
     }
 
-    default UdpConnectionInfo requestCall(String fromUser, String toReceiver)
+    default CallInfo requestCall(String fromUser, String toReceiver)
     {
         return requestCall(fromUser, toReceiver, com.zeroc.Ice.ObjectPrx.noExplicitContext);
     }
 
-    default UdpConnectionInfo requestCall(String fromUser, String toReceiver, java.util.Map<String, String> context)
+    default CallInfo requestCall(String fromUser, String toReceiver, java.util.Map<String, String> context)
     {
         return _iceI_requestCallAsync(fromUser, toReceiver, context, true).waitForResponse();
     }
 
-    default java.util.concurrent.CompletableFuture<UdpConnectionInfo> requestCallAsync(String fromUser, String toReceiver)
+    default java.util.concurrent.CompletableFuture<CallInfo> requestCallAsync(String fromUser, String toReceiver)
     {
         return _iceI_requestCallAsync(fromUser, toReceiver, com.zeroc.Ice.ObjectPrx.noExplicitContext, false);
     }
 
-    default java.util.concurrent.CompletableFuture<UdpConnectionInfo> requestCallAsync(String fromUser, String toReceiver, java.util.Map<String, String> context)
+    default java.util.concurrent.CompletableFuture<CallInfo> requestCallAsync(String fromUser, String toReceiver, java.util.Map<String, String> context)
     {
         return _iceI_requestCallAsync(fromUser, toReceiver, context, false);
     }
@@ -83,15 +83,15 @@ public interface VoiceChatPrx extends com.zeroc.Ice.ObjectPrx
      * @param sync -
      * @return -
      **/
-    default com.zeroc.IceInternal.OutgoingAsync<UdpConnectionInfo> _iceI_requestCallAsync(String iceP_fromUser, String iceP_toReceiver, java.util.Map<String, String> context, boolean sync)
+    default com.zeroc.IceInternal.OutgoingAsync<CallInfo> _iceI_requestCallAsync(String iceP_fromUser, String iceP_toReceiver, java.util.Map<String, String> context, boolean sync)
     {
-        com.zeroc.IceInternal.OutgoingAsync<UdpConnectionInfo> f = new com.zeroc.IceInternal.OutgoingAsync<>(this, "requestCall", null, sync, null);
+        com.zeroc.IceInternal.OutgoingAsync<CallInfo> f = new com.zeroc.IceInternal.OutgoingAsync<>(this, "requestCall", null, sync, null);
         f.invoke(true, context, null, ostr -> {
                      ostr.writeString(iceP_fromUser);
                      ostr.writeString(iceP_toReceiver);
                  }, istr -> {
-                     UdpConnectionInfo ret;
-                     ret = UdpConnectionInfo.ice_read(istr);
+                     CallInfo ret;
+                     ret = CallInfo.ice_read(istr);
                      return ret;
                  });
         return f;

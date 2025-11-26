@@ -1,4 +1,5 @@
 import axios from "axios";
+import { WebSocketService } from "../services/WebSocketService.js";
 
 export class HomePage {
   constructor(router) {
@@ -40,18 +41,22 @@ export class HomePage {
       if (name) {
         sessionStorage.setItem("username", name);
 
+        // 1. Registrar usuario en el Backend (Java) vía HTTP
         const success = await this.sendUserToServer(name);
 
         if(success) {
+          // 2. Conectar WebSocket al Proxy (Node.js) para llamadas y tiempo real
+          WebSocketService.getInstance().connect(name);
+
+          // 3. Navegar al chat
           this.router.navigateTo("/chat");
 
         } else {
-          errorMsg.textContent = "No se pudo registrar el usuario.";
+          errorMsg.textContent = "No se pudo registrar el usuario (posiblemente ya existe o servidor caído).";
           errorMsg.style.display = "block";
-        }          
+        }
       }
     });
-
 
     return div;
   }
@@ -66,7 +71,7 @@ export class HomePage {
       const response = await axios.post("http://localhost:3001/users", userData);
 
       console.log("Respuesta del proxy:", response.data);
-      
+
       if (response.data.status === "ok") {
         console.log("Usuario registrado correctamente:", response.data.body);
         return true;
@@ -76,8 +81,8 @@ export class HomePage {
       }
 
     } catch (error) {
-      console.error("Error al registrar el usuario:", error);
+      console.error("Error al conectar con el servidor:", error);
+      return false;
     }
   }
-
 }

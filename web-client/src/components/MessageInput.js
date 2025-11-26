@@ -2,13 +2,16 @@ import axios from "axios";
 
 export class MessageInput {
   constructor(chat) {
-    this.chat = chat;
+    this.chat = chat; // Referencia al componente padre para recargar mensajes
     this.isRecording = false;
+    this.mediaRecorder = null;
+    this.audioChunks = [];
   }
 
   render() {
     const div = document.createElement("div");
     div.classList.add("message-input");
+
     div.innerHTML = `
       <input id="msg" class="font-text-input" type="text" placeholder="Escribe un mensaje">
       <button id="record" class="button-on-off">Grabar audio</button>
@@ -19,100 +22,145 @@ export class MessageInput {
     const sendButton = div.querySelector("#send");
     const recordButton = div.querySelector("#record");
 
+    // Función para manejar el estado visual de los botones
     const updateButtonsState = () => {
       const text = input.value.trim();
       const hasText = text !== "";
 
-      // Botón Enviar: solo cuando hay texto y NO se está grabando
+      // Botón Enviar: Habilitado si hay texto y NO se está grabando
       sendButton.disabled = !hasText || this.isRecording;
       sendButton.classList.toggle("active", hasText && !this.isRecording);
 
-      // Botón Grabar audio: solo cuando NO hay texto y NO se está enviando texto
-      // (mientras hay texto, no se puede iniciar grabación)
+      // Botón Grabar: Habilitado si NO hay texto (prioridad al texto)
       recordButton.disabled = hasText && !this.isRecording;
       recordButton.classList.toggle("active", !hasText && !this.isRecording);
 
-      // Input deshabilitado mientras se graba
+      // Bloquear input mientras se graba
       input.disabled = this.isRecording;
     };
 
-    // Cuando el usuario escribe, actualizamos estados
-    input.addEventListener("input", () => {
-      updateButtonsState();
-    });
+    // Listener de escritura
+    input.addEventListener("input", updateButtonsState);
 
-    // Enviar mensaje de texto
-    sendButton.addEventListener("click", async () => {
-      const text = input.value.trim();
-      if (!text || this.isRecording) return;
-
-      const sender = sessionStorage.getItem("username");
-      const receiver = this.chat.receiver;
-
-      try {
-        const response = await axios.post("http://localhost:3001/add_text", {
-          sender,
-          receiver,
-          message: text,
-        });
-        console.log("Respuesta del proxy (texto):", response.data);
-
-        input.value = "";
-        updateButtonsState();
-
-        this.chat.loadMessages();
-      } catch (error) {
-        console.error("Error al enviar mensaje:", error);
-      }
-    });
-
-    // Grabar / detener grabación de audio
+    // ---------------------------------------------------------
+    // LÓGICA DE GRABACIÓN DE AUDIO (CLIENT-SIDE)
+    // ---------------------------------------------------------
     recordButton.addEventListener("click", async () => {
       const sender = sessionStorage.getItem("username");
       const receiver = this.chat.receiver;
 
       if (!this.isRecording) {
-        // Iniciar grabación
+        // --- INICIAR GRABACIÓN ---
         try {
-          const response = await axios.post("http://localhost:3001/record_audio", {
-            sender,
-            receiver,
-          });
-          console.log("Respuesta del proxy (record-audio):", response.data);
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          this.mediaRecorder = new MediaRecorder(stream);
+          this.audioChunks = [];
 
-          // Solo si fue bien cambiamos el estado
+          // Guardar fragmentos de audio
+          this.mediaRecorder.ondataavailable = (event) => {
+            this.audioChunks.push(event.data);
+          };
+
+          // Al detenerse, procesar el archivo y enviarlo
+          this.mediaRecorder.onstop = async () => {
+            // 1. Crear Blob de audio
+            const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+
+            // 2. Convertir a Base64
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+              // Quitamos el encabezado "data:audio/wav;base64,"
+              const base64String = reader.result.split(',')[1];
+
+              // 3. Enviar al Proxy
+              try {
+                console.log("Subiendo nota de voz...");
+                const response = await axios.post("http://localhost:3001/send_audio", {
+                  sender,
+                  receiver,
+                  audioData: base64String
+                });
+
+                console.log("Audio enviado:", response.data);
+
+                // 4. Refrescar el chat para mostrar el nuevo mensaje
+                this.chat.loadMessages();
+              } catch (err) {
+                console.error("Error al enviar el audio:", err);
+                alert("Falló el envío del audio.");
+              }
+            };
+          };
+
+          this.mediaRecorder.start();
           this.isRecording = true;
-          recordButton.textContent = "Grabando";
-          recordButton.classList.add("recording");
+
+          // Actualizar UI
+          recordButton.textContent = "Detener";
+          recordButton.classList.add("recording"); // Clase para ponerlo rojo si tienes CSS
           updateButtonsState();
-        } catch (error) {
-          console.error("Error al iniciar grabación:", error);
+
+        } catch (e) {
+          console.error("Error accediendo al micrófono:", e);
+          alert("No se pudo acceder al micrófono. Por favor permite el acceso.");
         }
+
       } else {
-        // Detener grabación y enviar audio
-        try {
-          const response = await axios.post("http://localhost:3001/send_audio", {
-            sender,
-            receiver,
-          });
-          console.log("Respuesta del proxy (send-audio):", response.data);
-
-          this.isRecording = false;
-          recordButton.textContent = "Grabar audio";
-          recordButton.classList.remove("recording");
-          updateButtonsState();
-
-          // Si quieres recargar mensajes después de enviar el audio:
-          this.chat.loadMessages();
-        } catch (error) {
-          console.error("Error al finalizar/enviar grabación:", error);
+        // --- DETENER GRABACIÓN ---
+        if (this.mediaRecorder) {
+          this.mediaRecorder.stop();
+          this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
         }
+
+        this.isRecording = false;
+
+        // Restaurar UI
+        recordButton.textContent = "Grabar audio";
+        recordButton.classList.remove("recording");
+        updateButtonsState();
       }
     });
 
-    // Estado inicial
+    // ---------------------------------------------------------
+    // LÓGICA DE ENVÍO DE TEXTO (EXISTENTE)
+    // ---------------------------------------------------------
+    sendButton.addEventListener("click", async () => {
+      const text = input.value.trim();
+      if (!text) return;
+
+      const sender = sessionStorage.getItem("username");
+      const receiver = this.chat.receiver;
+      const endpoint = this.chat.isGroup ? "/add_group_text" : "/add_text"; // Ajusta si usas un endpoint unificado
+
+      // Si tu backend usa un solo endpoint para ambos, usa ese.
+      // Basado en tu código anterior, parece que usas add_text genérico o lógica en backend.
+      // Aquí asumo el endpoint estándar que tenías:
+      try {
+        await axios.post("http://localhost:3001/add_text", {
+          sender,
+          receiver,
+          text,
+        });
+
+        input.value = "";
+        updateButtonsState();
+        await this.chat.loadMessages(); // Recargar mensajes
+      } catch (error) {
+        console.error("Error al enviar mensaje:", error);
+      }
+    });
+
+    // Permitir enviar con Enter
+    input.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && !sendButton.disabled) {
+        sendButton.click();
+      }
+    });
+
+    // Inicializar estado
     updateButtonsState();
 
     return div;
   }
-} 
+}

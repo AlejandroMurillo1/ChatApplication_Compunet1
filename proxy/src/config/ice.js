@@ -1,6 +1,6 @@
-const Ice = require("ice");
+const Ice = require("ice").Ice;
+const Chat = require("../../Chat").Chat;
 
-// Direcciones para la comunicación con el servidor Java (Backend)
 // Puerto 12000: Servidor Ice (VoiceChat) en Java
 const VOICE_CHAT_PROXY_STRING = "VoiceChat:tcp -h 127.0.0.1 -p 12000";
 
@@ -8,44 +8,77 @@ const VOICE_CHAT_PROXY_STRING = "VoiceChat:tcp -h 127.0.0.1 -p 12000";
 const CALLBACK_ADAPTER_ENDPOINT = "tcp -h 127.0.0.1 -p 12002";
 const CALLBACK_ADAPTER_NAME = "ClientCallbackAdapter";
 
-// Función para obtener una instancia única del Comunicador Ice
 let communicatorInstance = null;
+
 async function getCommunicator() {
     if (!communicatorInstance) {
+        // Inicialización simple. La configuración de red se hará en el servidor de callbacks.
         communicatorInstance = Ice.initialize();
     }
     return communicatorInstance;
 }
 
-// Implementación de la interfaz de Callback (ClientCallback)
-// NOTA: Esta clase asume que los stubs de Ice ya fueron generados en Node.js.
-class ClientCallbackI extends Ice.Chat.ClientCallback {
+class ClientCallbackI extends Chat.ClientCallback {
 
-    // Implementación del método incomingCall (Llamada entrante)
-    incomingCall(callerName, info, current) {
-        console.log(`[ICE CALLBACK] 📞 LLAMADA ENTRANTE de: ${callerName}`);
-        console.log(`               ID de Llamada: ${info.callID}, Puerto UDP: ${info.serverPort}`);
+    getWSClients() {
 
-        // Aquí iría la lógica para enviar una notificación WebSocket al Web Client
+        return global.app?.locals?.clients;
     }
 
-    // Implementación de callEnded (Llamada terminada)
+    broadcastEvent(clientID, type, payload) {
+        const WebSocket = require('ws');
+        const clients = this.getWSClients();
+
+        if (!clients) {
+            console.log("[Ice Error] No se pudo acceder a la lista de clientes WS.");
+            return;
+        }
+
+        const ws = clients.get(clientID);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type, payload }));
+            console.log(`[Proxy -> WS] Evento '${type}' enviado al usuario: ${clientID}`);
+        } else {
+            console.log(`[Proxy Warning] Usuario ${clientID} no conectado o socket cerrado.`);
+        }
+    }
+
+    //Llamada entrante
+    incomingCall(callerName, callID, current) {
+        console.log(`[Ice Recibido] 📞 Llamada de ${callerName} (ID: ${callID})`);
+
+        // Notificamos al cliente web destinatario (current.id.name es el userID)
+        this.broadcastEvent(current.id.name, 'incomingCall', {
+            callerName: callerName,
+            callID: callID
+        });
+    }
+
+    //Llamada Finalizada
     callEnded(callID, current) {
-        console.log(`[ICE CALLBACK] ❌ LLAMADA TERMINADA: ${callID}`);
-        // Aquí iría la lógica para notificar al Web Client
+        console.log(`[Ice Recibido] ❌ Fin de llamada: ${callID}`);
+        this.broadcastEvent(current.id.name, 'callEnded', { callID });
     }
 
-    // Implementación de voiceMessageReceived
+    //Mensaje de Voz Recibido
     voiceMessageReceived(sender, groupOrUser, fileName, current) {
-        console.log(`[ICE CALLBACK] 🗣️ Mensaje de voz recibido de ${sender} para ${groupOrUser}. Archivo: ${fileName}`);
-        // Aquí iría la lógica para notificar al Web Client
+        console.log(`[Ice Recibido] 🗣️ Audio nuevo: ${fileName}`);
+
+        // Enviamos la URL de descarga directa al cliente
+        this.broadcastEvent(current.id.name, 'voiceMessageReceived', {
+            sender: sender,
+            // El cliente usará esta URL para reproducir el audio
+            downloadUrl: `/api/audio/${fileName}`,
+            fileName: fileName
+        });
     }
 }
 
 module.exports = {
     getCommunicator,
+    ClientCallbackI,
     VOICE_CHAT_PROXY_STRING,
     CALLBACK_ADAPTER_ENDPOINT,
-    CALLBACK_ADAPTER_NAME,
-    ClientCallbackI
+    CALLBACK_ADAPTER_NAME
 };

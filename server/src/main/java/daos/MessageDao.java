@@ -106,37 +106,7 @@ public class MessageDao implements IDao<Pair<String, String>, List<IMessage>> {
     }
 
     private void syncAudioDataWithMessages() {
-        // Usuarios 1a1
-        for (Map.Entry<Pair<String, String>, List<IMessage>> entry : userMessages.entrySet()) {
-            Pair<String, String> key = entry.getKey();
-            Map<Integer, Audio> audioMap = userAudioStore.get(key);
-            if (audioMap == null) continue;
 
-            for (IMessage m : entry.getValue()) {
-                if (m.isAudio() && m instanceof Audio audioMsg) {
-                    Audio full = audioMap.get(audioMsg.getId());
-                    if (full != null) {
-                        audioMsg.setData(full.getData());
-                    }
-                }
-            }
-        }
-
-        // Grupos
-        for (Map.Entry<String, List<IMessage>> entry : groupMessages.entrySet()) {
-            String groupName = entry.getKey();
-            Map<Integer, Audio> audioMap = groupAudioStore.get(groupName);
-            if (audioMap == null) continue;
-
-            for (IMessage m : entry.getValue()) {
-                if (m.isAudio() && m instanceof Audio audioMsg) {
-                    Audio full = audioMap.get(audioMsg.getId());
-                    if (full != null) {
-                        audioMsg.setData(full.getData());
-                    }
-                }
-            }
-        }
     }
 
     // Guardar mensajes

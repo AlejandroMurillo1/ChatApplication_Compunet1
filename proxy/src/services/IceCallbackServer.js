@@ -8,48 +8,52 @@ const {
 let callbackAdapter = null;
 let callbackPrxString = null;
 
-// Inicia el servidor de callback Ice en el Proxy (única vez)
+// =========================================================
+// FUNCIÓN 1: Iniciar el servidor de callback
+// =========================================================
 async function startCallbackServer() {
     if (callbackAdapter) return callbackPrxString;
 
     try {
         const communicator = await getCommunicator();
 
-        // 1. Crear el adaptador para el servidor de callback
-        callbackAdapter = communicator.createObjectAdapterWithEndpoints(
-            CALLBACK_ADAPTER_NAME,
-            CALLBACK_ADAPTER_ENDPOINT
-        );
+        callbackAdapter = communicator.createObjectAdapter(CALLBACK_ADAPTER_NAME);
 
-        // 2. Crear el Servant (implementación de la interfaz)
+        // 3. Crear e instalar el Servant
         const servant = new ClientCallbackI();
-
-        // 3. Añadir el Servant al adaptador
         const identity = communicator.stringToIdentity("callback");
+        // .add() ahora funciona porque callbackAdapter es un objeto válido
         const proxy = callbackAdapter.add(servant, identity);
 
-        // 4. Activar el adaptador para empezar a recibir callbacks
-        callbackAdapter.activate();
+        // 4. Activar
+        await callbackAdapter.activate();
 
-        // 5. Convertir el Proxy a una string para enviarla al servidor Java
-        callbackPrxString = communicator.proxyToString(proxy);
+        // 5. Generar Proxy String final para enviar a Java
+        callbackPrxString = communicator.proxyToString(proxy) +
+            " " + CALLBACK_ADAPTER_ENDPOINT;
 
-        console.log(`[ICE] Servidor de Callback activo. Escuchando en ${CALLBACK_ADAPTER_ENDPOINT}`);
+        console.log(`[ICE] Servidor de Callback activo. Proxy string: ${callbackPrxString}`);
 
         return callbackPrxString;
 
     } catch (error) {
+        // En caso de fallo (ej. puerto 12002 ya en uso), el error será capturado aquí.
         console.error("[ICE ERROR] Fallo al iniciar el Servidor de Callback:", error);
         throw error;
     }
 }
 
-// Registra el callback en el servidor Java
+// =========================================================
+// FUNCIÓN 2: Registrar en el servidor Java
+// =========================================================
 async function registerCallback(clientID) {
+    // 1. Asegurar que el servidor de callbacks esté escuchando
     const prxString = await startCallbackServer();
+
+    // 2. Obtener el proxy de Java
     const voiceChatPrx = await require('./IceClient').getVoiceChatPrx();
 
-    // Llama al método remoto registerClient del servidor Java
+    // 3. Llamar a Java con la identidad del cliente y nuestro proxy string
     await voiceChatPrx.registerClient(clientID, prxString);
     console.log(`[ICE] Callback registrado en el servidor Java para el cliente: ${clientID}`);
 }

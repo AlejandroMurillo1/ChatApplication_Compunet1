@@ -5,146 +5,135 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Importar clases generadas por Slice (ClientCallbackPrx, UdpConnectionInfo, etc.)
+import Chat.CallInfo;
 import Chat.ClientCallbackPrx;
-import Chat.UdpConnectionInfo;
 
 import audio.AudioProcessor;
-import audio.MediaFlowHandler;
+
 import daos.GroupDao;
 import daos.UserDao;
-import daos.MessageDao; // CRÍTICO: Aseguramos el import
-import model.Pair;
-import model.Audio; // CRÍTICO: Para crear el objeto de metadatos
+import daos.MessageDao;
+import model.Audio;
 
 public class CallService {
 
-    private final Map<String, MediaFlowHandler> activeHandlers;
-    private final Map<String, ClientCallbackPrx> activeCallbacks;
-    private final Map<String, Pair<String, String>> callParticipants;
-
+    // Mapas concurrentes para manejar múltiples hilos de Ice sin errores
+    private final Map<String, ClientCallbackPrx> activeCallbacks = new ConcurrentHashMap<>();
     private final UserDao usersDao;
     private final GroupDao groupDao;
     private final MessageDao messageDao;
     private final AudioProcessor audioProcessor;
 
-    private static final int STARTING_UDP_PORT = 12001;
-    private int nextAvailablePort;
-
-
     public CallService(UserDao usersDao, GroupDao groupDao, MessageDao messageDao) {
-        this.activeHandlers = new HashMap<>();
-        this.activeCallbacks = new HashMap<>();
-        this.callParticipants = new HashMap<>();
         this.usersDao = usersDao;
         this.groupDao = groupDao;
         this.messageDao = messageDao;
         this.audioProcessor = new AudioProcessor();
-        this.nextAvailablePort = STARTING_UDP_PORT;
     }
 
     // ========================= MÉTODOS ICE (VOICECHAT) =========================
 
-    public synchronized void registerCallback(String clientID, ClientCallbackPrx callback) {
+    public void registerCallback(String clientID, ClientCallbackPrx callback) {
         activeCallbacks.put(clientID, callback);
-        System.out.println("Callback registrado para: " + clientID);
+        System.out.println("Ice: Callback registrado para el usuario: " + clientID);
     }
 
-    public UdpConnectionInfo requestCall(String fromUser, String toReceiver, String serverIP) throws IOException {
+    public CallInfo requestCall(String fromUser, String toReceiver) {
+        // 1. Validar si el usuario existe
         if (!usersDao.findAllKeys().contains(toReceiver)) {
-            // Manejar error: usuario no disponible
-            throw new RuntimeException("Receptor no conectado o no existe.");
+            return new CallInfo("", "NOT_FOUND");
         }
 
+        // 2. Validar si el receptor tiene conexión activa con el Proxy (tiene callback)
+        if (!activeCallbacks.containsKey(toReceiver)) {
+            return new CallInfo("", "OFFLINE");
+        }
+
+        // 3. Generar ID único para la llamada
         String callID = UUID.randomUUID().toString();
-        int port = getNextUdpPort();
 
-        // 1. Iniciar el Handler UDP (Relay)
-        MediaFlowHandler handler = new MediaFlowHandler(port, callID);
-        handler.start();
-        activeHandlers.put(callID, handler);
+        // 4. Notificar al receptor (El Proxy recibirá esto y enviará un evento WebSocket al cliente)
+        // Ejecutamos en un hilo aparte para no bloquear el retorno inmediato
+        new Thread(() -> notifyIncomingCall(fromUser, toReceiver, callID)).start();
 
-        // 2. Guardar participantes
-        callParticipants.put(callID, new Pair<>(fromUser, toReceiver));
+        System.out.println("Llamada iniciada: " + callID + " de " + fromUser + " para " + toReceiver);
 
-        // 3. Crear info de conexión
-        UdpConnectionInfo info = new UdpConnectionInfo(serverIP, port, callID);
-
-        // 4. Notificar al receptor (Callback)
-        notifyIncomingCall(fromUser, toReceiver, info);
-
-        return info;
+        // 5. Retornar info de éxito (Java NO devuelve IP ni puerto)
+        return new CallInfo(callID, "OK");
     }
 
     public void endCall(String callID) {
-        MediaFlowHandler handler = activeHandlers.remove(callID);
-        if (handler != null) {
-            handler.stopListening(); // Detener el hilo UDP
-            System.out.println("Llamada terminada y handler UDP cerrado: " + callID);
+        // Aquí podrías notificar a las partes si fuera necesario,
+        // pero usualmente el Proxy maneja la desconexión del socket.
+        System.out.println("Ice: Llamada finalizada reportada: " + callID);
 
-            // Notificar a los participantes
-            Pair<String, String> participants = callParticipants.remove(callID);
-            if (participants != null) {
-                notifyCallEnded(participants.getFirst(), callID); // Notificar al que llamó
-                notifyCallEnded(participants.getSecond(), callID); // Notificar al receptor
-            }
-        }
+        // Si necesitas notificar explícitamente a los clientes vía Ice:
+        // notifyCallEnded(callID);
     }
 
-    //IMPLEMENTACIÓN DE ENVÍO DE VOZ
+    // PERSISTENCIA DE MENSAJES DE VOZ
     public void saveVoiceMessage(String fromUser, String toReceiver, byte[] audioData) {
         try {
-            // 1. Guardar el archivo binario en el disco. El AudioProcessor devuelve el ID (nombre del archivo).
+            // 1. Guardar el archivo .wav en disco
             String fileName = audioProcessor.saveAudioBufferAsWav(audioData);
 
-            // 2. Crear el objeto de metadatos (Audio sin bytes)
+            // 2. Crear metadatos (IMPORTANTE: Pasamos null en 'data' para no guardar bytes en memoria RAM)
             Audio audioMetadata = new Audio(fromUser, toReceiver, null);
-            // Asignar el ID/FileName al objeto Audio para que MessageDao lo persista
-            audioMetadata.setId(Integer.parseInt(fileName.replace(".wav", "")));
 
-            // 3. Persistir la metadata en MessageDao
-            messageDao.saveUserMessage(audioMetadata);
+            // Usamos el hash del nombre del archivo como ID temporal (ya que tu modelo usa int)
+            // Idealmente deberías cambiar el ID a String en el futuro.
+            audioMetadata.setId(Math.abs(fileName.hashCode()));
 
-            // 4. Notificar al receptor (Callback)
-            notifyVoiceMessageReceived(fromUser, toReceiver, fileName);
+            // Guardamos el nombre del archivo en el texto o en un campo auxiliar si tu modelo lo permite.
+            // Por ahora, asumiremos que el cliente puede pedir el audio por su ID.
+
+            // 3. Persistir solo los metadatos en el JSON
+            if (isGroup(toReceiver)) {
+                messageDao.saveGroupMessage(audioMetadata);
+            } else {
+                messageDao.saveUserMessage(audioMetadata);
+            }
+
+            // 4. Notificar al receptor que tiene un nuevo audio
+            new Thread(() -> notifyVoiceMessageReceived(fromUser, toReceiver, fileName)).start();
 
         } catch (IOException e) {
-            System.err.println("Error al guardar el mensaje de voz: " + e.getMessage());
+            System.err.println("Error crítico guardando audio: " + e.getMessage());
         }
     }
 
-
-    // ========================= MÉTODOS ICE (CALLBACKS) =========================
-
-    private void notifyIncomingCall(String fromUser, String toReceiver, UdpConnectionInfo info) {
-        ClientCallbackPrx receiverCallback = activeCallbacks.get(toReceiver);
-        if (receiverCallback != null) {
-            receiverCallback.incomingCall(fromUser, info);
-        }
+    private boolean isGroup(String name) {
+        return groupDao.findById(name) != null;
     }
 
-    private void notifyCallEnded(String clientID, String callID) {
-        ClientCallbackPrx callback = activeCallbacks.get(clientID);
+    // ========================= NOTIFICACIONES (CALLBACKS) =========================
+
+    private void notifyIncomingCall(String fromUser, String toReceiver, String callID) {
+        ClientCallbackPrx callback = activeCallbacks.get(toReceiver);
         if (callback != null) {
             try {
-                callback.callEnded(callID);
-            } catch (com.zeroc.Ice.Exception e) {
-                System.err.println("Callback failed for " + clientID + ". Removing proxy.");
-                activeCallbacks.remove(clientID);
+                callback.incomingCall(fromUser, callID);
+            } catch (Exception e) {
+                System.err.println("Error notificando llamada a " + toReceiver + ". Eliminando callback.");
+                activeCallbacks.remove(toReceiver);
             }
         }
     }
 
     private void notifyVoiceMessageReceived(String sender, String receiver, String fileName) {
-        ClientCallbackPrx receiverCallback = activeCallbacks.get(receiver);
-        if (receiverCallback != null) {
-            receiverCallback.voiceMessageReceived(sender, receiver, fileName);
-            System.out.println("Callback: Voice message notification sent to " + receiver);
+        // Si es un grupo, habría que notificar a todos los miembros (bucle).
+        // Si es usuario directo:
+        ClientCallbackPrx callback = activeCallbacks.get(receiver);
+        if (callback != null) {
+            try {
+                // El parámetro del medio es 'groupOrUser'. Si es directo, es null o el mismo receiver.
+                callback.voiceMessageReceived(sender, receiver, fileName);
+            } catch (Exception e) {
+                System.err.println("Error notificando audio a " + receiver);
+            }
         }
-    }
-
-    private int getNextUdpPort() {
-        return nextAvailablePort++;
     }
 }
