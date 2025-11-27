@@ -260,6 +260,20 @@ public class MessageDao implements IDao<Pair<String, String>, List<IMessage>> {
         return existing;
     }
 
+    public Audio findAudioById(int audioId) {
+        for (Map<Integer, Audio> audioMap : userAudioStore.values()) {
+            if (audioMap.containsKey(audioId)) {
+                return audioMap.get(audioId);
+            }
+        }
+        for (Map<Integer, Audio> audioMap : groupAudioStore.values()) {
+            if (audioMap.containsKey(audioId)) {
+                return audioMap.get(audioId);
+            }
+        }
+        return null;
+    }
+
     private void saveGroupAudioInternal(String groupName, Audio audio) {
         Map<Integer, Audio> audiosById = groupAudioStore.getOrDefault(groupName, new HashMap<>());
 

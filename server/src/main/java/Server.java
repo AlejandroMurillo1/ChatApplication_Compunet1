@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import audio.ice.AudioClientManager;
+import audio.ice.AudioServiceI;
+import audio.service.AudioServiceImpl;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -15,21 +18,21 @@ import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
 
+import daos.MessageDao;
 import dtos.Request;
 import dtos.Response;
 import model.*;
 import services.ServerServices;
-import services.CallService; 
-import ice.VoiceChatI;
 import daos.UserDao;
 import daos.GroupDao;
+import daos.MessageDao;
 
 public class Server {
 
     private Gson gson;
     private ServerServices services;
-    private CallService callService;
     private boolean running;
+    private MessageDao messageDao;
 
     // Configuración de Ice
     private Communicator communicator;
@@ -47,10 +50,11 @@ public class Server {
 
         UserDao usersDao = services.getUsersDao();
         GroupDao groupDao = services.getGroupDao();
-        callService = new CallService(usersDao, groupDao);
+        // Asume que MessageDao se obtiene de services
+        this.messageDao = services.getMessageDao();
 
         // 1. Iniciar Servidor Ice en un hilo separado
-        startIceServer();
+        startIceServer(usersDao, groupDao, messageDao);
 
         // 2. Continuar con el servidor de mensajería TCP existente
         int port = 5000;
@@ -70,24 +74,31 @@ public class Server {
         }
     }
 
-    private void startIceServer() {
+    private void startIceServer(UserDao usersDao, GroupDao groupDao, MessageDao messageDao) {
         Thread iceThread = new Thread(() -> {
             try {
+                // 1. Inicializar componentes de Audio
+                AudioClientManager clientManager = new AudioClientManager();
+                AudioServiceImpl audioService = new AudioServiceImpl(usersDao, groupDao, messageDao, clientManager);
+
+                // 2. Inicializar Ice
                 communicator = Util.initialize();
                 ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints(
                         ICE_ADAPTER_NAME, ICE_ENDPOINT
                 );
 
-                VoiceChatI voiceChatServant = new VoiceChatI(callService, SERVER_IP);
+                // 3. Crear Servant e instalarlo
+                AudioServiceI audioServant = new AudioServiceI(audioService, clientManager, SERVER_IP);
 
-                adapter.add(voiceChatServant, Util.stringToIdentity("VoiceChat"));
+                // El Identity debe ser el mismo que el Proxy JS buscará.
+                adapter.add(audioServant, Util.stringToIdentity("AudioService"));
 
                 adapter.activate();
-                System.out.println("ZeroC Ice Server running on endpoint: " + ICE_ENDPOINT);
+                System.out.println("ZeroC Ice Server (Audio) running on endpoint: " + ICE_ENDPOINT);
 
                 communicator.waitForShutdown();
             } catch (Exception e) {
-                System.err.println("Error initializing ZeroC Ice Server: " + e.getMessage());
+                System.err.println("Error initializing ZeroC Ice Server (Audio): " + e.getMessage());
                 e.printStackTrace();
             }
         });
@@ -129,7 +140,7 @@ public class Server {
         }
     }
 
-    public Response handleRequest(Request rq)throws Exception {
+    public Response handleRequest(Request rq){
         Response resp = new Response();
         switch (rq.getAction()) {
             case "register_user":

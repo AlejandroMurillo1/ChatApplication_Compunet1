@@ -15,7 +15,13 @@ export class Router {
     if (route) {
       this.root.innerHTML = "";
       const page = new route.component(this);
-      this.root.appendChild(page.render());
+      const renderedPage = page.render();
+
+      if (renderedPage instanceof Node) {
+        this.root.appendChild(renderedPage);
+      } else {
+        console.error(`Router Error: Component ${route.component.name} failed to return a valid DOM Node. Received:`, renderedPage);
+      }
     }
   }
 }

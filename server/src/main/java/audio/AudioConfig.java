@@ -12,6 +12,4 @@ public class AudioConfig {
     public static AudioFormat getAudioFormat() {
         return new AudioFormat(SAMPLE_RATE, SAMPLE_SIZE_IN_BITS, CHANNELS, SIGNED, BIG_ENDIAN);
     }
-
-    public static final int UDP_PACKET_SIZE = 1024;
 }

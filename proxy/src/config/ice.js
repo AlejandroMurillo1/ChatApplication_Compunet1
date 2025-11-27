@@ -1,51 +1,47 @@
-const Ice = require("ice");
+// Configuración
+const {Ice} = require("ice");
+const ICE_SERVER_HOST = "127.0.0.1";
+const ICE_SERVER_PORT = 12000;
+const VOICE_CHAT_PROXY_STRING = `AudioService:tcp -h ${ICE_SERVER_HOST} -p ${ICE_SERVER_PORT}`;
 
-// Direcciones para la comunicación con el servidor Java (Backend)
-// Puerto 12000: Servidor Ice (VoiceChat) en Java
-const VOICE_CHAT_PROXY_STRING = "VoiceChat:tcp -h 127.0.0.1 -p 12000";
+let communicator = null;
+let notifyFrontend = () => {};
 
-// Puerto 12002: Proxy Node.js (ClientCallback) esperando llamadas de Java
-const CALLBACK_ADAPTER_ENDPOINT = "tcp -h 127.0.0.1 -p 12002";
-const CALLBACK_ADAPTER_NAME = "ClientCallbackAdapter";
-
-// Función para obtener una instancia única del Comunicador Ice
-let communicatorInstance = null;
 async function getCommunicator() {
-    if (!communicatorInstance) {
-        communicatorInstance = Ice.initialize();
+    if (!communicator) {
+        communicator = Ice.initialize();
     }
-    return communicatorInstance;
+    return communicator;
 }
 
-// Implementación de la interfaz de Callback (ClientCallback)
-// NOTA: Esta clase asume que los stubs de Ice ya fueron generados en Node.js.
-class ClientCallbackI extends Ice.Chat.ClientCallback {
-
-    // Implementación del método incomingCall (Llamada entrante)
-    incomingCall(callerName, info, current) {
-        console.log(`[ICE CALLBACK] 📞 LLAMADA ENTRANTE de: ${callerName}`);
-        console.log(`               ID de Llamada: ${info.callID}, Puerto UDP: ${info.serverPort}`);
-
-        // Aquí iría la lógica para enviar una notificación WebSocket al Web Client
+// Clase base para callbacks (se usará en IceCallbackServer)
+class ClientCallbackI extends Ice.Object {
+    incomingCall(callerId, sessionId, current) {
+        console.log(`[ICE CALLBACK] 📞 Llamada entrante de ${callerId}`);
+        notifyFrontend('incoming_call', { callerId, sessionId });
+        return Promise.resolve();
     }
 
-    // Implementación de callEnded (Llamada terminada)
-    callEnded(callID, current) {
-        console.log(`[ICE CALLBACK] ❌ LLAMADA TERMINADA: ${callID}`);
-        // Aquí iría la lógica para notificar al Web Client
+    callEnded(sessionId, current) {
+        console.log(`[ICE CALLBACK] ❌ Llamada terminada: ${sessionId}`);
+        notifyFrontend('call_ended', { sessionId });
+        return Promise.resolve();
     }
 
-    // Implementación de voiceMessageReceived
-    voiceMessageReceived(sender, groupOrUser, fileName, current) {
-        console.log(`[ICE CALLBACK] 🗣️ Mensaje de voz recibido de ${sender} para ${groupOrUser}. Archivo: ${fileName}`);
-        // Aquí iría la lógica para notificar al Web Client
+    voiceMessageReceived(sender, receiver, messageId, current) {
+        console.log(`[ICE CALLBACK] 🗣️ Audio recibido de ${sender}`);
+        notifyFrontend('voice_message', { sender, messageId, receiver });
+        return Promise.resolve();
     }
+}
+
+function setFrontendNotifier(callback) {
+    notifyFrontend = callback;
 }
 
 module.exports = {
     getCommunicator,
     VOICE_CHAT_PROXY_STRING,
-    CALLBACK_ADAPTER_ENDPOINT,
-    CALLBACK_ADAPTER_NAME,
-    ClientCallbackI
+    ClientCallbackI,
+    setFrontendNotifier
 };

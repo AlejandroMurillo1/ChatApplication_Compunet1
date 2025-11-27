@@ -1,0 +1,50 @@
+[
+  {
+    "sender": "isa",
+    "receiver": "alejo",
+    "text": "Holaaaa sapa",
+    "type": "text"
+  },
+  {
+    "sender": "alejo",
+    "receiver": "isa",
+    "text": "Hola después de mover el server",
+    "type": "text"
+  },
+  {
+    "sender": "isa",
+    "receiver": "alejo",
+    "text": "Holis, funciona",
+    "type": "text"
+  },
+  {
+    "sender": "alejo",
+    "receiver": "isa",
+    "text": "Ve ese ice no quiere servir",
+    "type": "text"
+  },
+  {
+    "sender": "alejo",
+    "receiver": "isa",
+    "text": "Hola, acabé de mover el client. Sirve?",
+    "type": "text"
+  },
+  {
+    "sender": "isa",
+    "receiver": "alejo",
+    "text": "sisa mano",
+    "type": "text"
+  },
+  {
+    "id": 1,
+    "sender": "isa",
+    "receiver": "alejo",
+    "type": "audio"
+  },
+  {
+    "id": 2,
+    "sender": "alejo",
+    "receiver": "isa",
+    "type": "audio"
+  }
+]

@@ -132,4 +132,7 @@ public class ServerServices {
         return (UserDao) usersDao;
     }
 
+    public MessageDao getMessageDao() {
+        return messageDao;
+    }
 }

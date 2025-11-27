@@ -1,4 +1,5 @@
 import axios from "axios";
+import { closeWebSocket } from "../services/WebSocketService.js";
 
 export class Menu {
   constructor(router) {
@@ -34,6 +35,7 @@ export class Menu {
       const success = await this.updateUserStatusToOffline(name);  
 
       if (success) {
+        closeWebSocket();
         sessionStorage.clear();
         this.router.navigateTo("/");
       } else {

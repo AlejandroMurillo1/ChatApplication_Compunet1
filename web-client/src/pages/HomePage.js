@@ -1,4 +1,5 @@
 import axios from "axios";
+import {initializeWebSocket} from "../services/WebSocketService.js";
 
 export class HomePage {
   constructor(router) {
@@ -43,6 +44,7 @@ export class HomePage {
         const success = await this.sendUserToServer(name);
 
         if(success) {
+          initializeWebSocket(name,this.router)
           this.router.navigateTo("/chat");
 
         } else {

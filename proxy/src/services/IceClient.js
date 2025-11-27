@@ -1,47 +1,144 @@
+const Ice = require("ice").Ice;
 const { getCommunicator, VOICE_CHAT_PROXY_STRING } = require('../config/ice');
 
-let voiceChatPrx = null;
+// --- IMPORTACIÓN CLAVE ---
+// Subimos 2 niveles para encontrar Audio.js en la carpeta proxy/
+// Asumimos que el módulo dentro del archivo .ice se llamaba "ChatAudio"
+const ChatAudio = require('../../Audio').ChatAudio;
 
-// Inicializa el proxy de la interfaz VoiceChat del servidor Java
-async function getVoiceChatPrx() {
-    if (!voiceChatPrx) {
-        const communicator = await getCommunicator();
-        const proxy = communicator.stringToProxy(VOICE_CHAT_PROXY_STRING);
+let audioServicePrx = null;
 
-        // El checkedCast asegura que el proxy es del tipo correcto antes de usarlo
-        voiceChatPrx = await Ice.Chat.VoiceChatPrx.checkedCast(proxy);
-
-        if (!voiceChatPrx) {
-            throw new Error("Proxy de VoiceChat no encontrado. Verifique que el servidor Ice (Java) esté activo.");
-        }
+async function getAudioServicePrx() {
+    if (!audioServicePrx) {
+        await initializeProxy();
     }
-    return voiceChatPrx;
+    return audioServicePrx;
 }
 
-// Lógica de negocio para iniciar una llamada
-async function requestCall(fromUser, toReceiver) {
-    const prx = await getVoiceChatPrx();
-    // Llama al método remoto: requestCall
-    const udpInfo = await prx.requestCall(fromUser, toReceiver);
-    return udpInfo;
+async function initializeProxy() {
+    try {
+        const communicator = await getCommunicator();
+
+        console.log('[ICE CLIENT] Conectando a:', VOICE_CHAT_PROXY_STRING);
+        const baseProxy = communicator.stringToProxy(VOICE_CHAT_PROXY_STRING);
+
+        // --- CHECKED CAST ---
+        // Esto transforma el proxy genérico en uno que tiene tus métodos (sendVoiceMessage, etc.)
+        console.log('[ICE CLIENT] Verificando interfaz ChatAudio.AudioService...');
+
+        if (!ChatAudio || !ChatAudio.AudioServicePrx) {
+            throw new Error("No se encontró el módulo ChatAudio en proxy/Audio.js. Verifica el nombre del módulo en tu archivo .ice");
+        }
+
+        audioServicePrx = await ChatAudio.AudioServicePrx.checkedCast(baseProxy);
+
+        if (!audioServicePrx) {
+            throw new Error("checkedCast devolvió null. El servidor Java no está corriendo o no implementa la interfaz correcta.");
+        }
+
+        console.log('[ICE CLIENT] ✅ Proxy inicializado y métodos detectados correctamente');
+
+    } catch (error) {
+        console.error('[ICE CLIENT] ❌ Error fatal inicializando proxy:', error);
+        audioServicePrx = null;
+        throw error;
+    }
 }
 
-// Lógica de negocio para finalizar una llamada
-async function endCall(callID) {
-    const prx = await getVoiceChatPrx();
-    await prx.endCall(callID);
+// --- MÉTODOS DE NEGOCIO (Ahora usando el proxy casteado) ---
+
+async function sendVoiceMessage(senderId, receiverId, audioBuffer) {
+    try {
+        const prx = await getAudioServicePrx();
+        // Convertimos a Uint8Array para compatibilidad con sequence<byte>
+        const audioBytes = new Uint8Array(audioBuffer);
+
+        // Llamada directa (ya no es dinámica)
+        return await prx.sendVoiceMessage(senderId, receiverId, audioBytes);
+    } catch (error) {
+        console.error('[ICE CLIENT] Error enviando audio:', error.message);
+        throw error;
+    }
 }
 
-// Lógica de negocio para enviar mensaje de voz
-async function sendVoiceMessage(fromUser, toReceiver, audioBuffer) {
-    const prx = await getVoiceChatPrx();
-    // audioBuffer debe ser un Buffer de Node.js (se mapea a sequence<byte>/AudioBuffer)
-    await prx.sendVoiceMessage(fromUser, toReceiver, audioBuffer);
+async function getVoiceMessage(messageId) {
+    try {
+        const prx = await getAudioServicePrx();
+        const bytes = await prx.getVoiceMessage(messageId);
+        return Buffer.from(bytes); // Convertimos de vuelta a Buffer de Node
+    } catch (error) {
+        console.error('[ICE CLIENT] Error obteniendo audio:', error.message);
+        throw error;
+    }
+}
+
+async function startCall(callerId, targetId) {
+    try {
+        const prx = await getAudioServicePrx();
+        return await prx.startCall(callerId, targetId);
+    } catch (error) {
+        console.error('[ICE CLIENT] Error iniciando llamada:', error.message);
+        throw error;
+    }
+}
+
+async function joinCall(userId, sessionId) {
+    try {
+        const prx = await getAudioServicePrx();
+        return await prx.joinCall(userId, sessionId);
+    } catch (error) {
+        console.error('[ICE CLIENT] Error uniéndose a llamada:', error.message);
+        throw error;
+    }
+}
+
+async function endCall(userId, sessionId) {
+    try {
+        const prx = await getAudioServicePrx();
+        await prx.endCall(userId, sessionId);
+    } catch (error) {
+        console.error('[ICE CLIENT] Error terminando llamada:', error.message);
+        throw error;
+    }
+}
+
+async function registerClient(userId, callbackProxy) {
+    try {
+        const prx = await getAudioServicePrx();
+        // Importante: El callbackProxy debe ser casteado a la interfaz correcta si es necesario,
+        // pero generalmente Ice JS lo maneja si pasas el proxy.
+        // Si falla, podrías necesitar: ChatAudio.AudioClientCallbackPrx.uncheckedCast(callbackProxy)
+        await prx.registerClient(userId, callbackProxy);
+        console.log(`[ICE CLIENT] Cliente ${userId} registrado en Java`);
+    } catch (error) {
+        console.error('[ICE CLIENT] Error registrando cliente:', error.message);
+        throw error;
+    }
+}
+
+// Método de prueba actualizado
+async function testAllMethods() {
+    try {
+        const prx = await getAudioServicePrx();
+        console.log('[ICE TEST] Proxy casteado:', prx.constructor.name);
+
+        // Verificamos si los métodos existen en el prototipo
+        const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(prx));
+        console.log('[ICE TEST] Métodos disponibles:', methods.filter(m => !m.startsWith('ice_')));
+
+        return { success: true, methods };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
 }
 
 module.exports = {
-    getVoiceChatPrx,
-    requestCall,
+    getAudioServicePrx,
+    startCall,
+    joinCall,
     endCall,
-    sendVoiceMessage
+    sendVoiceMessage,
+    getVoiceMessage,
+    registerClient,
+    testAllMethods
 };

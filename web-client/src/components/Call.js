@@ -1,8 +1,9 @@
 import axios from "axios";
 
 export class Call {
-  constructor(receiver) {
+  constructor(receiver, sessionId) {
     this.receiver = receiver;
+    this.sessionId = sessionId;
   }
 
   render() {
@@ -34,13 +35,13 @@ export class Call {
     hangupBtn.innerHTML = `<span class="call-end-icon ">Colgar</span>`;
 
     hangupBtn.addEventListener("click", async () => {
-      const sender = sessionStorage.getItem("username");
+      const userId = sessionStorage.getItem("username");
       const receiver = this.receiver;
 
       try {
         const response = await axios.post(
           "http://localhost:3001/end_call",
-          { sender, receiver }
+            { userId, sessionId: this.sessionId }
         );
         console.log("Respuesta del proxy /end_call:", response.data);
       } catch (error) {
