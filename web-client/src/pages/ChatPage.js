@@ -66,21 +66,19 @@ export class ChatPage {
         try {
           const response = await axios.post(
               "http://localhost:3001/start_call",
-              { callerId: sender, targetId: receiver } // ⬅️ CORRECCIÓN: Usar callerId y targetId
+              { callerId: sender, targetId: receiver }
           );
           console.log("Respuesta del proxy /start-call:", response.data);
 
-          const sessionId = response.data.data.sessionId;
+          const { sessionId, webSocketUrl } = response.data.data; // ⬅️ Obtener webSocketUrl
 
           titleSpan.textContent = `Llamando a ${username}...`;
 
           chatArea.innerHTML = "";
           chatArea.appendChild(topBar);
 
-          // ⬅️ Pasar sessionId al componente Call
-          const callComponent = new Call(receiver, sessionId).render();
+          const callComponent = new Call(receiver, sessionId, webSocketUrl).render();
 
-          // Escuchar cuando se cuelga
           callComponent.addEventListener("call:hangup", () => {
             titleSpan.textContent = `Chat con ${username}`;
             renderChat();

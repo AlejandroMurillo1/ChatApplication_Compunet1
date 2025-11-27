@@ -60,7 +60,6 @@ public class AudioServiceImpl {
 
     /**
      * Implementa la recuperación de bytes de un mensaje de voz por su ID.
-     * Esta es la implementación que faltaba.
      */
     public byte[] handleGetVoiceMessage(String messageIdStr) {
         try {
@@ -112,7 +111,6 @@ public class AudioServiceImpl {
 
         CallInfo info = new CallInfo();
         info.sessionId = sessionId;
-        // ⬅️ CRÍTICO: Devolver la misma URL de WebSocket
         info.webSocketUrl = "ws://" + serverIP + ":3001/call_media/" + sessionId;
 
         System.out.println("User " + userId + " joined call " + sessionId);

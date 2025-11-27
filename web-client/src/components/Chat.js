@@ -1,11 +1,13 @@
 import axios from "axios";
 import { MessageInput } from "./MessageInput.js";
+import { addListener, removeListener } from "../services/WebSocketService.js"
 
 export class Chat {
   constructor(receiver, isGroup = false) {
     this.receiver = receiver;
     this.isGroup = isGroup;
     this.messages = [];
+    this.voiceMessageListener = this.handleVoiceMessageReceived.bind(this);
   }
 
   render() {
@@ -18,9 +20,41 @@ export class Chat {
     const messageInput = new MessageInput(this).render();
 
     this.wrapper.append(this.div, messageInput);
+
+    this.setupListeners();
+
     this.loadMessages();
+    this.wrapper.addEventListener('DOMNodeRemovedFromDocument', this.cleanupListeners.bind(this));
 
     return this.wrapper;
+  }
+
+  setupListeners() {
+    addListener('voice_message', this.voiceMessageListener);
+  }
+
+  cleanupListeners() {
+    removeListener('voice_message', this.voiceMessageListener);
+    console.log(`[Chat] Listeners de voz limpiados para ${this.receiver}`);
+  }
+
+  handleVoiceMessageReceived(data) {
+    const currentUser = sessionStorage.getItem("username");
+    const { sender, receiver } = data; // receiver puede ser un usuario o un grupo
+
+    // 1. Caso Chat 1-a-1: Si el mensaje es para mí Y el remitente es el usuario que estoy viendo.
+    const isDirectMessageMatch = !this.isGroup && (sender === this.receiver && receiver === currentUser);
+
+    // 2. Caso Chat 1-a-1: Si el mensaje es de mí Y el receptor es el usuario que estoy viendo.
+    const isMySentMessageMatch = !this.isGroup && (sender === currentUser && receiver === this.receiver);
+
+    // 3. Caso Chat de Grupo: Si el receptor del mensaje es el grupo que estoy viendo.
+    const isGroupMessageMatch = this.isGroup && receiver === this.receiver;
+
+    if (isDirectMessageMatch || isMySentMessageMatch || isGroupMessageMatch) {
+      console.log(`[WS] Refrescando chat: Mensaje de ${sender} recibido.`);
+      this.loadMessages();
+    }
   }
 
   async loadMessages() {

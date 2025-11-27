@@ -33,6 +33,7 @@ public class AudioClientManager {
             } catch (com.zeroc.Ice.Exception e) {
                 System.err.println("Callback failed for " + toReceiver + ". Proxy removed.");
                 unregisterCallback(toReceiver);
+                e.printStackTrace();
             }
         } else {
             System.out.println("Warning: Receiver " + toReceiver + " not available for callback.");
@@ -40,17 +41,14 @@ public class AudioClientManager {
     }
 
     public void notifyCallEnded(String sessionId) {
-        // En producción se buscarían solo los participantes. Aquí notificamos a todos para el ejemplo.
         for (AudioClientCallbackPrx callback : activeCallbacks.values()) {
             try {
                 callback.callEnded(sessionId);
             } catch (com.zeroc.Ice.Exception e) {
-                // Ignore failure if client is already gone
             }
         }
     }
 
-    // NOTA: Asumiendo que has añadido 'voiceMessageReceived' a Audio.ice
     public void notifyVoiceMessageReceived(String sender, String receiver, String fileName) {
         AudioClientCallbackPrx receiverCallback = activeCallbacks.get(receiver);
         if (receiverCallback != null) {

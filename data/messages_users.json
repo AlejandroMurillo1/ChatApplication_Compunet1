@@ -46,5 +46,23 @@
     "sender": "alejo",
     "receiver": "isa",
     "type": "audio"
+  },
+  {
+    "sender": "alejo",
+    "receiver": "isa",
+    "text": "Funciona después de mover el cliente?",
+    "type": "text"
+  },
+  {
+    "sender": "isa",
+    "receiver": "alejo",
+    "text": "Sisa",
+    "type": "text"
+  },
+  {
+    "id": 3,
+    "sender": "alejo",
+    "receiver": "isa",
+    "type": "audio"
   }
 ]

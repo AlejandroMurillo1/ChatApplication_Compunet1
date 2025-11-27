@@ -25,9 +25,54 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const connectedUsers = new Map();
+const mediaConnections = new Map();
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => { //Req pa obtener url del ws
   console.log('[WS] Cliente conectado');
+
+  const urlParts = req.url ? req.url.split('/') : [];
+  const isMediaConnection = urlParts[1] === 'call_media';
+  const sessionId = urlParts[2];
+
+  if (isMediaConnection && sessionId) {
+    // --- MANEJO DE CONEXIÓN DE MEDIOS
+
+    if (!mediaConnections.has(sessionId)) {
+      mediaConnections.set(sessionId, new Set());
+    }
+    mediaConnections.get(sessionId).add(ws);
+    ws.sessionId = sessionId;
+
+    console.log(`[WS MEDIA] Cliente conectado para sesión ${sessionId}. Total: ${mediaConnections.get(sessionId).size}`);
+
+    ws.on('message', (message) => {
+      // 2. Lógica de Enrutamiento de Medios
+      const sessionClients = mediaConnections.get(sessionId);
+      if (sessionClients) {
+        sessionClients.forEach(client => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(message);
+          }
+        });
+      }
+    });
+
+    ws.on('close', () => {
+      const sessionClients = mediaConnections.get(sessionId);
+      if (sessionClients) {
+        sessionClients.delete(ws);
+        console.log(`[WS MEDIA] Cliente desconectado de sesión ${sessionId}. Restantes: ${sessionClients.size}`);
+        if (sessionClients.size === 0) {
+          mediaConnections.delete(sessionId);
+          console.log(`[WS MEDIA] Sesión ${sessionId} cerrada.`);
+        }
+      }
+    });
+
+    return;
+  }
+
+  // --- 3. MANEJO DE CONEXIÓN DE SEÑALIZACIÓN (EXISTENTE) ---
 
   ws.on('message', async (message) => {
     try {
@@ -42,7 +87,6 @@ wss.on('connection', (ws) => {
 
         console.log(`[WS] Usuario registrado: ${userId}`);
 
-        // Intentar registro ICE con manejo de errores mejorado
         try {
           const success = await callbackServer.registerUserForCallbacks(userId);
 
@@ -105,14 +149,12 @@ app.get("/ice-status", (req, res) => {
   });
 });
 
-// Inyectamos la lógica de notificación en ice.js
 // Esta función se ejecuta cuando Java nos manda una notificación
 setFrontendNotifier((userId, eventName, data) => {
   const ws = connectedUsers.get(userId);
 
   // Verificamos que el usuario tenga conexión y esté abierta (OPEN = 1)
   if (ws && ws.readyState === WebSocket.OPEN) {
-    // WS no tiene .emit(evento), así que enviamos un JSON con 'type'
     const payload = JSON.stringify({
       type: eventName, // 'incoming_call', 'voice_message', etc.
       data: data
@@ -128,7 +170,6 @@ setFrontendNotifier((userId, eventName, data) => {
 
 // =========================================================================
 // 2. ENDPOINTS ORIGINALES TCP (INTACTOS)
-// =========================================================================
 
 app.post("/users", (req, res) => {
   const userData = req.body;
@@ -328,7 +369,6 @@ app.post("/record_audio", (req, res) => {
   res.status(400).json({ status: "warning", message: "Use /send_audio endpoint" });
 });
 
-// =========================================================================
 
 app.get("/ice/debug", (req, res) => {
   const adapterInfo = callbackServer.getAdapterInfo();
@@ -359,7 +399,6 @@ async function initializeICE() {
     const prx = await iceClient.getAudioServicePrx();
 
     // --- CORRECCIÓN VISUAL ---
-    // Inspeccionamos el prototipo para ver los métodos heredados
     const prototype = Object.getPrototypeOf(prx);
     const methods = Object.getOwnPropertyNames(prototype)
         .filter(key =>

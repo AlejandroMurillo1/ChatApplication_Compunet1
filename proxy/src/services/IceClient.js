@@ -2,8 +2,6 @@ const Ice = require("ice").Ice;
 const { getCommunicator, VOICE_CHAT_PROXY_STRING } = require('../config/ice');
 
 // --- IMPORTACIÓN CLAVE ---
-// Subimos 2 niveles para encontrar Audio.js en la carpeta proxy/
-// Asumimos que el módulo dentro del archivo .ice se llamaba "ChatAudio"
 const ChatAudio = require('../../Audio').ChatAudio;
 
 let audioServicePrx = null;
@@ -23,7 +21,6 @@ async function initializeProxy() {
         const baseProxy = communicator.stringToProxy(VOICE_CHAT_PROXY_STRING);
 
         // --- CHECKED CAST ---
-        // Esto transforma el proxy genérico en uno que tiene tus métodos (sendVoiceMessage, etc.)
         console.log('[ICE CLIENT] Verificando interfaz ChatAudio.AudioService...');
 
         if (!ChatAudio || !ChatAudio.AudioServicePrx) {
@@ -53,7 +50,6 @@ async function sendVoiceMessage(senderId, receiverId, audioBuffer) {
         // Convertimos a Uint8Array para compatibilidad con sequence<byte>
         const audioBytes = new Uint8Array(audioBuffer);
 
-        // Llamada directa (ya no es dinámica)
         return await prx.sendVoiceMessage(senderId, receiverId, audioBytes);
     } catch (error) {
         console.error('[ICE CLIENT] Error enviando audio:', error.message);
@@ -105,9 +101,6 @@ async function endCall(userId, sessionId) {
 async function registerClient(userId, callbackProxy) {
     try {
         const prx = await getAudioServicePrx();
-        // Importante: El callbackProxy debe ser casteado a la interfaz correcta si es necesario,
-        // pero generalmente Ice JS lo maneja si pasas el proxy.
-        // Si falla, podrías necesitar: ChatAudio.AudioClientCallbackPrx.uncheckedCast(callbackProxy)
         await prx.registerClient(userId, callbackProxy);
         console.log(`[ICE CLIENT] Cliente ${userId} registrado en Java`);
     } catch (error) {

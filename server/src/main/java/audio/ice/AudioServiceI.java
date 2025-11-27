@@ -51,6 +51,16 @@ public class AudioServiceI implements AudioService {
 
     @Override
     public void registerClient(String userId, AudioClientCallbackPrx callback, Current current) {
-        clientManager.registerCallback(userId, callback);
+        try {
+            // Llama a la lógica de registro (que no tiene try/catch interno)
+            clientManager.registerCallback(userId, callback);
+            System.out.println("✅ Callback registrado con éxito para: " + userId);
+        } catch (Exception e) {
+            System.err.println("❌ ERROR FATAL al intentar registrar el callback para " + userId);
+            e.printStackTrace(); // <-- Esto mostrará el origen del error en la consola de Java.
+
+            // Esto es crucial para que el Proxy sepa que la operación falló.
+            throw new com.zeroc.Ice.UnknownLocalException("Failed to register client: " + e.getMessage(), e);
+        }
     }
 }

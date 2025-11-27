@@ -58,7 +58,6 @@ public class Server {
 
         // 2. Continuar con el servidor de mensajería TCP existente
         int port = 5000;
-        // ... (código existente del ServerSocket y el bucle while)
         ServerSocket socket = new ServerSocket(port);
         System.out.println("Server running on port: " + port);
         running = true;

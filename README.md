@@ -1,7 +1,7 @@
 # ChatApplication - Compunet1
 #### Curso: Computación en Internet 1 - Universidad Icesi
 
-<small>Santiago de Cali, Miércoles 15 de Octubre de 2025</small>
+<small>Santiago de Cali, Miércoles 26 de Noviembre de 2025</small>
 ### Integrantes:
 
 - Isabella Candado
@@ -49,7 +49,9 @@
 - Registro de Usuarios.
 - Creación de Grupos.
 - Envío de mensajes de texto a Usuarios o a Grupos.
-- Almacenamiento/Persistencia del historial de mensajes de los chats.
+- Almacenamiento/Persistencia del historial de mensajes de los chats  (Texto y Audio).
+- Envío de mensajes de voz a usuarios o a grupos
+- Llamadas P2P y Grupales (Funcionalidad en desarrollo).
 
 > Estas funciones están mapeadas en la aplicación por medio de diferentes páginas, las cuales se especifican más adelante en [Guía para ubicarse dentro de la página](#guía-para-ubicarse-dentro-de-la-página).
 
@@ -58,11 +60,11 @@
 Cada componente del proyecto se ejecuta en un puerto distinto en **localhost**:
 
 | Componente      | Puerto | Descripción                                                       |
-| --------------- | ------ | ----------------------------------------------------------------- |
+| --------------- | ------ |-------------------------------------------------------------------|
 | **Cliente Web** | `3000` | Aplicación web del usuario final, servida por Webpack Dev Server. |
 | **Proxy**       | `3001` | Puente entre el cliente web y el servidor Java.                   |
 | **Servidor**    | `5000` | Backend principal del sistema, desarrollado en Java con Gradle.   |
-
+| **Ice Server** |  `12000`| Server ZeroC Ice, utilizado para llamadas/audios P2P y grupales.  |
 > **Notas:**
 > - Asegúrate de que los puertos no estén ocupados por otros procesos.
 > - Si necesitas modificarlos, puedes hacerlo:
@@ -100,6 +102,12 @@ npm i axios
 
 Desde la raíz del proyecto, instala las dependencias necesarias:
 
+**Dependencia Ice**
+```bash
+npm install ice --save
+```
+
+**Dependencias Express, CORS y Axios**
 ```bash
 cd proxy
 npm i express cors axios
@@ -119,6 +127,8 @@ java -jar build/libs/server.jar
 
 Para confirmar que se ejecutó correctamente, debes ver en consola:
 `Server running on port: 5000`
+
+Adicionalmente, se efectúa la ejecución del hilo Ice Server en el puerto 12000. Deberás ver en la consola: `ZeroC Ice Server (Audio) running on endpoint: 12000`
 
 ### Proxy
 

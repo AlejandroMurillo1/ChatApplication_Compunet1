@@ -2,7 +2,9 @@
 const {Ice} = require("ice");
 const ICE_SERVER_HOST = "127.0.0.1";
 const ICE_SERVER_PORT = 12000;
+const ICE_CALLBACK_PORT = 12001; // ⬅️ NEW: Puerto que el Proxy usará para escuchar a Java
 const VOICE_CHAT_PROXY_STRING = `AudioService:tcp -h ${ICE_SERVER_HOST} -p ${ICE_SERVER_PORT}`;
+
 
 let communicator = null;
 let notifyFrontend = () => {};
@@ -14,7 +16,6 @@ async function getCommunicator() {
     return communicator;
 }
 
-// Clase base para callbacks (se usará en IceCallbackServer)
 class ClientCallbackI extends Ice.Object {
     incomingCall(callerId, sessionId, current) {
         console.log(`[ICE CALLBACK] 📞 Llamada entrante de ${callerId}`);
@@ -42,6 +43,7 @@ function setFrontendNotifier(callback) {
 module.exports = {
     getCommunicator,
     VOICE_CHAT_PROXY_STRING,
+    ICE_CALLBACK_PORT,
     ClientCallbackI,
     setFrontendNotifier
 };
